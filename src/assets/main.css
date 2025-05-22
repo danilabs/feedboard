@@ -1,0 +1,6 @@
+@import "tailwindcss";
+@import './base.css';
+
+body {
+  background: #000;
+}
