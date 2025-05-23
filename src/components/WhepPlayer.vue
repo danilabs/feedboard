@@ -1,7 +1,7 @@
 <template>
-  <div>
+  <div class="relative">
+    <span style="position: absolute; top: 5px; left: 5px;">WHEP</span>
     <video ref="vDiv" class="aspect-video" muted>
-
     </video>
   </div>
 </template>
@@ -22,10 +22,26 @@ export default defineComponent({
     async function initMediaPlayer() {
       console.log('initMediaPlayer')
       player = new WebRTCPlayer({
-        video: vDiv.value as HTMLVideoElement,
+        video: vDiv.value as unknown as HTMLVideoElement,
         type: 'whep',
+        statsTypeFilter: '^candidate-*|^inbound-rtp'
       })
-      await player.load(new URL("http://localhost:8889/cooks/whep"))
+
+      player.on('no-media', () => {
+        console.log('media timeout occured');
+      });
+      player.on('media-recovered', () => {
+        console.log('media recovered');
+      });
+
+      // Subscribe for RTC stats: `stats:${RTCStatsType}`
+      player.on('stats:inbound-rtp', (report) => {
+        if (report.kind === 'video') {
+          console.log(report);
+        }
+      });
+
+      await player.load(new URL("http://localhost:8889/test_stream/whep"))
       vDiv.value.play()
     }
 
