@@ -10,12 +10,18 @@
 
 </style>
 <script lang="ts">
-import { defineComponent, onMounted, ref } from 'vue'
+import { defineComponent, onMounted, type PropType, ref } from 'vue'
 import { WebRTCPlayer } from '@eyevinn/webrtc-player'
 
 export default defineComponent({
   name: 'WhepPlayer',
-  setup () {
+  props: {
+    streamURL: {
+      type: String as PropType<string>,
+      required: true
+    },
+  },
+  setup (props) {
     const vDiv = ref<HTMLDivElement>(null)
     let player: WebRTCPlayer
 
@@ -25,7 +31,7 @@ export default defineComponent({
         video: vDiv.value as HTMLVideoElement,
         type: 'whep',
       })
-      await player.load(new URL("http://localhost:8889/cooks/whep"))
+      await player.load(new URL(props.streamURL))
       vDiv.value.play()
     }
 

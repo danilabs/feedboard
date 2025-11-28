@@ -1,7 +1,7 @@
 <template>
   <div>
     <video muted autoplay>
-      <source src="http://localhost:8888/compressed/index.m3u8" type="application/x-mpegURL">
+      <source src="http://localhost:8888/axis_camera/index.m3u8" type="application/x-mpegURL">
     </video>
   </div>
 </template>
