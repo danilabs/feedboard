@@ -1,21 +1,23 @@
 <template>
   <div>
-    <video ref="vDiv" class="aspect-video" muted>
-
-    </video>
+    <video ref="vDiv" class="aspect-video" muted></video>
   </div>
 </template>
 
-<style scoped>
-
-</style>
+<style scoped></style>
 <script lang="ts">
-import { defineComponent, onMounted, ref } from 'vue'
+import { defineComponent, onMounted, type PropType, ref } from 'vue'
 import { WebRTCPlayer } from '@eyevinn/webrtc-player'
 
 export default defineComponent({
   name: 'WhepPlayer',
-  setup () {
+  props: {
+    streamURL: {
+      type: String as PropType<string>,
+      required: false,
+    },
+  },
+  setup(props) {
     const vDiv = ref<HTMLDivElement>(null)
     let player: WebRTCPlayer
 
@@ -25,17 +27,17 @@ export default defineComponent({
         video: vDiv.value as HTMLVideoElement,
         type: 'whep',
       })
-      await player.load(new URL("http://localhost:8889/cooks/whep"))
+      await player.load(new URL(props.streamURL))
       vDiv.value.play()
     }
 
     onMounted(async () => {
-      await initMediaPlayer()      // vDiv.value.play()
+      await initMediaPlayer() // vDiv.value.play()
     })
 
     return {
       vDiv,
     }
-  }
+  },
 })
 </script>
