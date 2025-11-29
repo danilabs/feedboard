@@ -14,7 +14,9 @@
   },
   "dependencies": {
     "@eyevinn/webrtc-player": "^0.13.0",
+    "@eyevinn/whip-web-client": "^1.1.7",
     "@tailwindcss/vite": "^4.1.4",
+    "@vueuse/core": "^14.1.0",
     "hls.js": "^1.6.2",
     "pinia": "^3.0.1",
     "tailwindcss": "^4.1.4",
