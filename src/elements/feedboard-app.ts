@@ -935,6 +935,33 @@ export class FeedboardApp extends LitElement {
     }
   }
 
+  private addCaptureToCell() {
+    if (this.selectedCell === null) {
+      const emptyIndex = this.cells.findIndex((c) => c.type === 'empty')
+      if (emptyIndex !== -1) {
+        this.selectedCell = emptyIndex
+      } else {
+        return
+      }
+    }
+
+    const newCells = [...this.cells]
+    newCells[this.selectedCell] = {
+      type: 'capture',
+      publishPath: '',
+    }
+    this.cells = newCells
+    this.saveState()
+
+    // Move to next cell
+    const nextCell = this.selectedCell + 1
+    if (nextCell < this.cells.length) {
+      this.selectedCell = nextCell
+    } else {
+      this.selectedCell = null
+    }
+  }
+
   private openCaptureWindow() {
     const server = this.getServerUrl()
     const url = `/capture.html?server=${encodeURIComponent(server)}`
@@ -1004,7 +1031,8 @@ export class FeedboardApp extends LitElement {
           <feedboard-capture
             id="capture-${index}"
             server=${this.getServerUrl()}
-            publish-path=${cell.publishPath || '/webcam'}
+            publish-to=${cell.publishPath || ''}
+            ?show-info=${this.showInfo}
             style="width: 100%; height: 100%;"
           ></feedboard-capture>
         `
@@ -1025,7 +1053,7 @@ export class FeedboardApp extends LitElement {
         @dblclick=${handleDblClick}
       >
         ${content}
-        ${this.showInfo && cell.type !== 'empty' && cell.type !== 'stream' ? this.renderInfoOverlay(cell, index) : ''}
+        ${this.showInfo && cell.type !== 'empty' && cell.type !== 'stream' && cell.type !== 'capture' ? this.renderInfoOverlay(cell, index) : ''}
       </div>
     `
   }
@@ -1167,10 +1195,19 @@ export class FeedboardApp extends LitElement {
         </div>
 
         <div class="section-header">Capture</div>
-        <div class="clock-controls">
-          <button class="add-clock-btn" @click=${() => this.openCaptureWindow()}>
-            Open Capture Window
-          </button>
+        <div class="streams-list">
+          <div class="stream-item" @click=${() => this.addCaptureToCell()}>
+            <div class="stream-status ready"></div>
+            <span class="stream-name">Capture</span>
+            <button
+              class="pop-out-btn"
+              @click=${(e: Event) => {
+                e.stopPropagation()
+                this.openCaptureWindow()
+              }}
+              title="Open in new window"
+            >POP</button>
+          </div>
         </div>
 
       </aside>

@@ -20,7 +20,7 @@
   </style>
 </head>
 <body>
-  <feedboard-capture id="capture"></feedboard-capture>
+  <feedboard-capture id="capture" show-info></feedboard-capture>
   <script type="module">
     const params = new URLSearchParams(window.location.search)
     const capture = document.getElementById('capture')
@@ -29,7 +29,7 @@
       capture.setAttribute('server', params.get('server'))
     }
     if (params.get('path')) {
-      capture.setAttribute('publish-path', params.get('path'))
+      capture.setAttribute('publish-to', params.get('path'))
     }
   </script>
 </body>

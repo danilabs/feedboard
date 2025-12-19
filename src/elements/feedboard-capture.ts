@@ -2,31 +2,21 @@ import { LitElement, html, css } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { WhipClient, getDevices, captureCamera, captureScreen } from '@/lib/whip-client'
 
-type CaptureSource = 'camera' | 'screen' | 'none'
+type CaptureType = 'camera' | 'screen' | 'tab'
 type Status = 'idle' | 'previewing' | 'connecting' | 'live' | 'error'
 
 @customElement('feedboard-capture')
 export class FeedboardCapture extends LitElement {
   static styles = css`
     :host {
-      display: flex;
-      flex-direction: column;
+      display: block;
+      position: relative;
       width: 100%;
       height: 100%;
-      background: #111;
+      background: #000;
       color: #fff;
       font-family: system-ui, -apple-system, sans-serif;
       overflow: hidden;
-    }
-
-    .preview-container {
-      flex: 1;
-      position: relative;
-      background: #000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 0;
     }
 
     video {
@@ -35,49 +25,150 @@ export class FeedboardCapture extends LitElement {
       object-fit: contain;
     }
 
-    .no-preview {
-      color: #444;
-      font-size: 0.875rem;
-      text-align: center;
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #666;
     }
 
-    .status-badge {
-      position: absolute;
-      top: 0.5rem;
-      left: 0.5rem;
-      padding: 0.25rem 0.5rem;
-      border-radius: 4px;
-      font-size: 0.7rem;
-      font-weight: 600;
-      text-transform: uppercase;
+    .status-dot.previewing {
+      background: #2563eb;
     }
 
-    .status-badge.live {
+    .status-dot.live {
       background: #dc2626;
       animation: pulse 1.5s infinite;
     }
 
-    .status-badge.previewing {
-      background: #2563eb;
-    }
-
-    .status-badge.connecting {
+    .status-dot.connecting {
       background: #d97706;
     }
 
     @keyframes pulse {
       0%, 100% { opacity: 1; }
-      50% { opacity: 0.7; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Info overlay - matches player style */
+    .info-overlay {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      color: #fff;
+      font-size: 0.7rem;
+      padding: 0.5rem 0.6rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      z-index: 20;
+    }
+
+    .info-title-row {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-weight: 600;
+      font-size: 0.75rem;
+    }
+
+    .info-row {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .info-label {
+      color: #888;
+      min-width: 50px;
+    }
+
+    .info-select {
+      padding: 0.15rem 0.3rem;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+      color: #fff;
+      font-size: 0.65rem;
+      cursor: pointer;
+    }
+
+    .info-select:focus {
+      outline: none;
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+
+    .info-input {
+      flex: 1;
+      padding: 0.15rem 0.3rem;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+      color: #fff;
+      font-size: 0.65rem;
+    }
+
+    .info-input:focus {
+      outline: none;
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+
+    .info-controls {
+      display: flex;
+      gap: 0.3rem;
+      margin-top: 0.2rem;
+    }
+
+    .info-btn {
+      padding: 0.2rem 0.4rem;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+      color: #fff;
+      font-size: 0.6rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .info-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .info-btn.active {
+      background: #2563eb;
+      border-color: #3b82f6;
+    }
+
+    .info-btn.publish {
+      background: #15803d;
+      border-color: #22c55e;
+    }
+
+    .info-btn.publish:hover {
+      background: #16a34a;
+    }
+
+    .info-btn.publish.live {
+      background: #dc2626;
+      border-color: #ef4444;
+    }
+
+    .info-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     .vu-meter {
       position: absolute;
       right: 0.5rem;
       top: 0.5rem;
-      bottom: 0.5rem;
-      width: 8px;
-      background: #222;
-      border-radius: 4px;
+      bottom: 4rem;
+      width: 6px;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 3px;
       overflow: hidden;
       display: flex;
       flex-direction: column-reverse;
@@ -89,125 +180,22 @@ export class FeedboardCapture extends LitElement {
       width: 100%;
     }
 
-    .controls {
-      background: #1a1a1a;
-      padding: 0.75rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-      border-top: 1px solid #333;
-    }
-
-    .control-row {
-      display: flex;
-      gap: 0.5rem;
-      align-items: center;
-    }
-
-    select, input {
-      flex: 1;
-      padding: 0.4rem 0.5rem;
-      background: #222;
-      border: 1px solid #333;
-      border-radius: 4px;
-      color: #fff;
-      font-size: 0.75rem;
-      box-sizing: border-box;
-    }
-
-    select:focus, input:focus {
-      outline: none;
-      border-color: #3b82f6;
-    }
-
-    .btn {
-      padding: 0.4rem 0.75rem;
-      border: 1px solid #333;
-      border-radius: 4px;
-      font-size: 0.75rem;
-      cursor: pointer;
-      transition: all 0.15s;
-      white-space: nowrap;
-    }
-
-    .btn-source {
-      background: #222;
-      color: #fff;
-    }
-
-    .btn-source:hover {
-      background: #333;
-    }
-
-    .btn-source.active {
-      background: #2563eb;
-      border-color: #3b82f6;
-    }
-
-    .btn-mute {
-      background: #222;
-      color: #888;
-      min-width: 32px;
-    }
-
-    .btn-mute.muted {
-      background: #7f1d1d;
-      border-color: #dc2626;
-      color: #fff;
-    }
-
-    .btn-publish {
-      background: #15803d;
-      border-color: #22c55e;
-      color: #fff;
-      flex: 1;
-    }
-
-    .btn-publish:hover {
-      background: #16a34a;
-    }
-
-    .btn-publish.live {
-      background: #dc2626;
-      border-color: #ef4444;
-    }
-
-    .btn-publish:disabled {
-      background: #333;
-      border-color: #444;
-      color: #666;
-      cursor: not-allowed;
-    }
-
-    .btn-stop {
-      background: #333;
-      color: #fff;
-    }
-
-    .btn-stop:hover {
-      background: #444;
-    }
-
-    .publish-row {
-      display: flex;
-      gap: 0.5rem;
-    }
-
-    .publish-path {
-      flex: 1;
-    }
-
-    .error {
+    .error-text {
       color: #f87171;
-      font-size: 0.7rem;
-      padding: 0.25rem 0;
+      font-size: 0.6rem;
     }
   `
 
+  // Configuration attributes
+  @property({ type: String }) type: CaptureType = 'camera'
+  @property({ type: String, attribute: 'publish-to' }) publishTo = ''
   @property({ type: String }) server = ''
-  @property({ type: String, attribute: 'publish-path' }) publishPath = '/webcam'
+  @property({ type: String, attribute: 'device-id' }) deviceId = ''
+  @property({ type: String }) resolution: '720p' | '1080p' | '4k' = '1080p'
+  @property({ type: Boolean, attribute: 'show-info' }) showInfo = false
 
-  @state() private source: CaptureSource = 'none'
+  // Internal state
+  @state() private currentType: CaptureType = 'camera'
   @state() private status: Status = 'idle'
   @state() private cameras: MediaDeviceInfo[] = []
   @state() private microphones: MediaDeviceInfo[] = []
@@ -217,6 +205,7 @@ export class FeedboardCapture extends LitElement {
   @state() private audioMuted = false
   @state() private vuLevel = 0
   @state() private errorMessage = ''
+  @state() private publishPath = ''
 
   private stream: MediaStream | null = null
   private whipClient: WhipClient | null = null
@@ -226,7 +215,14 @@ export class FeedboardCapture extends LitElement {
 
   async connectedCallback() {
     super.connectedCallback()
+    this.currentType = this.type
+    this.publishPath = this.publishTo
     await this.loadDevices()
+
+    // Auto-start camera by default
+    if (this.type === 'camera') {
+      this.startCamera()
+    }
   }
 
   disconnectedCallback() {
@@ -234,12 +230,24 @@ export class FeedboardCapture extends LitElement {
     this.stopCapture()
   }
 
+  private getResolutionConstraints() {
+    switch (this.resolution) {
+      case '720p': return { width: 1280, height: 720 }
+      case '4k': return { width: 3840, height: 2160 }
+      default: return { width: 1920, height: 1080 }
+    }
+  }
+
   private async loadDevices() {
     try {
       const { cameras, microphones } = await getDevices()
       this.cameras = cameras
       this.microphones = microphones
-      if (cameras.length) this.selectedCamera = cameras[0].deviceId
+      if (this.deviceId) {
+        this.selectedCamera = this.deviceId
+      } else if (cameras.length) {
+        this.selectedCamera = cameras[0].deviceId
+      }
       if (microphones.length) this.selectedMic = microphones[0].deviceId
     } catch (e) {
       console.warn('Could not enumerate devices:', e)
@@ -253,7 +261,7 @@ export class FeedboardCapture extends LitElement {
 
   private async startCamera() {
     this.stopCapture()
-    this.source = 'camera'
+    this.currentType = 'camera'
     this.status = 'previewing'
     this.errorMessage = ''
 
@@ -261,6 +269,7 @@ export class FeedboardCapture extends LitElement {
       this.stream = await captureCamera({
         videoDeviceId: this.selectedCamera || undefined,
         audioDeviceId: this.selectedMic || undefined,
+        ...this.getResolutionConstraints(),
       })
       this.attachStream()
     } catch (e) {
@@ -271,13 +280,12 @@ export class FeedboardCapture extends LitElement {
 
   private async startScreen() {
     this.stopCapture()
-    this.source = 'screen'
+    this.currentType = 'screen'
     this.status = 'previewing'
     this.errorMessage = ''
 
     try {
       this.stream = await captureScreen(true)
-      // Screen share ended by user
       this.stream.getVideoTracks()[0]?.addEventListener('ended', () => {
         this.stopCapture()
       })
@@ -285,7 +293,33 @@ export class FeedboardCapture extends LitElement {
     } catch (e) {
       this.status = 'error'
       this.errorMessage = e instanceof Error ? e.message : 'Failed to capture screen'
-      this.source = 'none'
+      this.currentType = 'camera'
+    }
+  }
+
+  private async startTab() {
+    this.stopCapture()
+    this.currentType = 'tab'
+    this.status = 'previewing'
+    this.errorMessage = ''
+
+    try {
+      // @ts-ignore - preferCurrentTab is experimental
+      this.stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: 'browser' },
+        audio: true,
+        // @ts-ignore
+        preferCurrentTab: false,
+        selfBrowserSurface: 'include',
+      })
+      this.stream.getVideoTracks()[0]?.addEventListener('ended', () => {
+        this.stopCapture()
+      })
+      this.attachStream()
+    } catch (e) {
+      this.status = 'error'
+      this.errorMessage = e instanceof Error ? e.message : 'Failed to capture tab'
+      this.currentType = 'camera'
     }
   }
 
@@ -347,7 +381,6 @@ export class FeedboardCapture extends LitElement {
       video.srcObject = null
     }
 
-    this.source = 'none'
     this.status = 'idle'
   }
 
@@ -362,7 +395,7 @@ export class FeedboardCapture extends LitElement {
   }
 
   private async startPublishing() {
-    if (!this.stream) return
+    if (!this.stream || !this.publishPath) return
 
     this.status = 'connecting'
     this.errorMessage = ''
@@ -390,129 +423,129 @@ export class FeedboardCapture extends LitElement {
     }
   }
 
+  private handleSourceChange(e: Event) {
+    const value = (e.target as HTMLSelectElement).value as CaptureType
+    if (value === 'camera') this.startCamera()
+    else if (value === 'screen') this.startScreen()
+    else if (value === 'tab') this.startTab()
+  }
+
+  private handleCameraChange(e: Event) {
+    this.selectedCamera = (e.target as HTMLSelectElement).value
+    if (this.status === 'previewing' && this.currentType === 'camera') {
+      this.startCamera()
+    }
+  }
+
+  private handleMicChange(e: Event) {
+    this.selectedMic = (e.target as HTMLSelectElement).value
+    if (this.status === 'previewing' && this.currentType === 'camera') {
+      this.startCamera()
+    }
+  }
+
   render() {
-    const showVu = this.stream && !this.audioMuted && this.source !== 'none'
+    const showVu = this.stream && !this.audioMuted && this.showInfo
 
     return html`
-      <div class="preview-container">
-        <video muted playsinline></video>
+      <video muted playsinline></video>
 
-        ${this.source === 'none'
-          ? html`<div class="no-preview">Select a source to preview</div>`
-          : ''}
-
-        ${this.status === 'live'
-          ? html`<div class="status-badge live">LIVE</div>`
-          : this.status === 'connecting'
-            ? html`<div class="status-badge connecting">Connecting</div>`
-            : this.status === 'previewing'
-              ? html`<div class="status-badge previewing">Preview</div>`
-              : ''}
-
-        ${showVu
-          ? html`
-              <div class="vu-meter">
-                <div class="vu-level" style="height: ${this.vuLevel}%"></div>
-              </div>
-            `
-          : ''}
-      </div>
-
-      <div class="controls">
-        <div class="control-row">
-          <button
-            class="btn btn-source ${this.source === 'camera' ? 'active' : ''}"
-            @click=${this.startCamera}
-          >
-            Camera
-          </button>
-          <button
-            class="btn btn-source ${this.source === 'screen' ? 'active' : ''}"
-            @click=${this.startScreen}
-          >
-            Screen
-          </button>
-          ${this.source !== 'none'
-            ? html`
-                <button class="btn btn-stop" @click=${this.stopCapture}>Stop</button>
-              `
-            : ''}
+      ${showVu ? html`
+        <div class="vu-meter">
+          <div class="vu-level" style="height: ${this.vuLevel}%"></div>
         </div>
+      ` : ''}
 
-        ${this.source === 'camera'
-          ? html`
-              <div class="control-row">
-                <select
-                  .value=${this.selectedCamera}
-                  @change=${(e: Event) => {
-                    this.selectedCamera = (e.target as HTMLSelectElement).value
-                    if (this.status === 'previewing') this.startCamera()
-                  }}
-                >
-                  ${this.cameras.map(
-                    (c) => html`<option value=${c.deviceId}>${c.label || 'Camera'}</option>`
-                  )}
-                </select>
-              </div>
-              <div class="control-row">
-                <select
-                  .value=${this.selectedMic}
-                  @change=${(e: Event) => {
-                    this.selectedMic = (e.target as HTMLSelectElement).value
-                    if (this.status === 'previewing') this.startCamera()
-                  }}
-                >
-                  ${this.microphones.map(
-                    (m) => html`<option value=${m.deviceId}>${m.label || 'Microphone'}</option>`
-                  )}
-                </select>
-              </div>
-            `
-          : ''}
+      ${this.showInfo ? html`
+        <div class="info-overlay">
+          <div class="info-title-row">
+            <div class="status-dot ${this.status}"></div>
+            <span>Capture</span>
+          </div>
 
-        <div class="control-row">
-          <button
-            class="btn btn-mute ${this.videoMuted ? 'muted' : ''}"
-            @click=${this.toggleVideoMute}
-            ?disabled=${!this.stream}
-            title="Toggle video"
-          >
-            ${this.videoMuted ? '🚫' : '📹'}
-          </button>
-          <button
-            class="btn btn-mute ${this.audioMuted ? 'muted' : ''}"
-            @click=${this.toggleAudioMute}
-            ?disabled=${!this.stream}
-            title="Toggle audio"
-          >
-            ${this.audioMuted ? '🔇' : '🎤'}
-          </button>
-          <input
-            class="publish-path"
-            type="text"
-            placeholder="/path"
-            .value=${this.publishPath}
-            @input=${(e: Event) => (this.publishPath = (e.target as HTMLInputElement).value)}
-          />
-          ${this.status === 'live'
-            ? html`
-                <button class="btn btn-publish live" @click=${this.stopPublishing}>
-                  Stop
-                </button>
-              `
-            : html`
-                <button
-                  class="btn btn-publish"
-                  @click=${this.startPublishing}
-                  ?disabled=${!this.stream || this.status === 'connecting'}
-                >
-                  ${this.status === 'connecting' ? 'Connecting...' : 'Publish'}
-                </button>
-              `}
+          <div class="info-row">
+            <span class="info-label">Source</span>
+            <select
+              class="info-select"
+              .value=${this.currentType}
+              @change=${this.handleSourceChange}
+            >
+              <option value="camera">Camera</option>
+              <option value="screen">Screen</option>
+              <option value="tab">Tab</option>
+            </select>
+          </div>
+
+          ${this.currentType === 'camera' && this.cameras.length > 0 ? html`
+            <div class="info-row">
+              <span class="info-label">Camera</span>
+              <select
+                class="info-select"
+                .value=${this.selectedCamera}
+                @change=${this.handleCameraChange}
+              >
+                ${this.cameras.map(c => html`
+                  <option value=${c.deviceId}>${c.label || 'Camera'}</option>
+                `)}
+              </select>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Mic</span>
+              <select
+                class="info-select"
+                .value=${this.selectedMic}
+                @change=${this.handleMicChange}
+              >
+                ${this.microphones.map(m => html`
+                  <option value=${m.deviceId}>${m.label || 'Microphone'}</option>
+                `)}
+              </select>
+            </div>
+          ` : ''}
+
+          <div class="info-row">
+            <span class="info-label">Publish</span>
+            <input
+              class="info-input"
+              type="text"
+              placeholder="/path"
+              .value=${this.publishPath}
+              @input=${(e: Event) => this.publishPath = (e.target as HTMLInputElement).value}
+            />
+          </div>
+
+          <div class="info-controls">
+            <button
+              class="info-btn ${!this.videoMuted ? 'active' : ''}"
+              @click=${this.toggleVideoMute}
+              ?disabled=${!this.stream}
+            >${this.videoMuted ? 'Video Off' : 'Video On'}</button>
+            <button
+              class="info-btn ${!this.audioMuted ? 'active' : ''}"
+              @click=${this.toggleAudioMute}
+              ?disabled=${!this.stream}
+            >${this.audioMuted ? 'Audio Off' : 'Audio On'}</button>
+            ${this.status === 'live' ? html`
+              <button class="info-btn publish live" @click=${this.stopPublishing}>
+                Stop
+              </button>
+            ` : html`
+              <button
+                class="info-btn publish"
+                @click=${this.startPublishing}
+                ?disabled=${!this.stream || this.status === 'connecting' || !this.publishPath}
+              >
+                ${this.status === 'connecting' ? '...' : 'Publish'}
+              </button>
+            `}
+            <button class="info-btn" @click=${this.stopCapture} ?disabled=${this.status === 'idle'}>
+              Stop
+            </button>
+          </div>
+
+          ${this.errorMessage ? html`<div class="error-text">${this.errorMessage}</div>` : ''}
         </div>
-
-        ${this.errorMessage ? html`<div class="error">${this.errorMessage}</div>` : ''}
-      </div>
+      ` : ''}
     `
   }
 }
