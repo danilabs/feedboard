@@ -483,11 +483,23 @@ export class FeedboardPlayer extends LitElement {
   @property({ type: Boolean, attribute: 'show-vu' }) showVu = false
   @state() private meterData: PPMMeterData | null = null
 
+  // Stream stats
+  @state() private streamStats: {
+    resolution?: string
+    framerate?: number
+    bitrate?: number
+    codec?: string
+    packetsLost?: number
+  } = {}
+
   private whepClient: WhepClient | null = null
   private hlsPlayer: HlsPlayer | null = null
   private videoElement: HTMLVideoElement | null = null
   private ppmMeter: PPMMeter | null = null
   private hasConnected = false
+  private statsInterval: number | null = null
+  private lastBytesReceived = 0
+  private lastStatsTime = 0
 
   connectedCallback() {
     super.connectedCallback()
@@ -500,6 +512,7 @@ export class FeedboardPlayer extends LitElement {
     super.disconnectedCallback()
     this.disconnect()
     this.stopPPMMeter()
+    this.stopStatsPolling()
   }
 
   private getDisplayLabel(): string {
@@ -542,6 +555,68 @@ export class FeedboardPlayer extends LitElement {
       this.ppmMeter = null
     }
     this.meterData = null
+  }
+
+  private startStatsPolling() {
+    if (this.statsInterval) return
+    this.statsInterval = window.setInterval(() => this.updateStats(), 1000)
+    this.updateStats()
+  }
+
+  private stopStatsPolling() {
+    if (this.statsInterval) {
+      clearInterval(this.statsInterval)
+      this.statsInterval = null
+    }
+    this.streamStats = {}
+  }
+
+  private async updateStats() {
+    if (!this.whepClient) return
+
+    try {
+      const stats = await this.whepClient.getStats()
+      if (!stats) return
+
+      const now = Date.now()
+      let totalBytesReceived = 0
+
+      stats.forEach((report: any) => {
+        if (report.type === 'inbound-rtp' && report.kind === 'video') {
+          this.streamStats = {
+            ...this.streamStats,
+            resolution: report.frameWidth && report.frameHeight
+              ? `${report.frameWidth}×${report.frameHeight}`
+              : this.streamStats.resolution,
+            framerate: report.framesPerSecond
+              ? Math.round(report.framesPerSecond)
+              : this.streamStats.framerate,
+            packetsLost: report.packetsLost,
+          }
+          totalBytesReceived += report.bytesReceived || 0
+        }
+
+        if (report.type === 'codec' && report.mimeType?.startsWith('video/')) {
+          this.streamStats = {
+            ...this.streamStats,
+            codec: report.mimeType.replace('video/', '').toUpperCase(),
+          }
+        }
+      })
+
+      // Calculate bitrate
+      if (this.lastStatsTime > 0 && totalBytesReceived > this.lastBytesReceived) {
+        const elapsed = (now - this.lastStatsTime) / 1000
+        const bytes = totalBytesReceived - this.lastBytesReceived
+        const bitrate = Math.round((bytes * 8) / elapsed / 1000) // kbps
+        this.streamStats = { ...this.streamStats, bitrate }
+      }
+
+      this.lastBytesReceived = totalBytesReceived
+      this.lastStatsTime = now
+    } catch (e) {
+      // Stats not available
+    }
   }
 
   private getServer(): string {
@@ -627,6 +702,10 @@ export class FeedboardPlayer extends LitElement {
         if (this.showVu) {
           this.startPPMMeter()
         }
+        // Start stats polling if info panel is shown
+        if (this.showInfo) {
+          this.startStatsPolling()
+        }
       } else if (urls.hlsUrl) {
         this.hlsPlayer = new HlsPlayer(urls.hlsUrl, this.videoElement)
         this.hlsPlayer.connect()
@@ -692,6 +771,15 @@ export class FeedboardPlayer extends LitElement {
         this.startPPMMeter()
       } else if (!this.showVu) {
         this.stopPPMMeter()
+      }
+    }
+
+    // Start/stop stats polling when showInfo changes
+    if (changedProperties.has('showInfo')) {
+      if (this.showInfo && this.status === 'playing' && this.activeProtocol === 'whep') {
+        this.startStatsPolling()
+      } else if (!this.showInfo) {
+        this.stopStatsPolling()
       }
     }
 
@@ -824,6 +912,20 @@ export class FeedboardPlayer extends LitElement {
             </select>
             <span class="info-value">${this.activeProtocol || '-'}</span>
           </div>
+          ${this.streamStats.resolution || this.streamStats.codec ? html`
+            <div class="info-row">
+              <span class="info-label">Video</span>
+              <span class="info-value">${this.streamStats.resolution || '-'} ${this.streamStats.framerate ? `@ ${this.streamStats.framerate}fps` : ''}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Codec</span>
+              <span class="info-value">${this.streamStats.codec || '-'}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Bitrate</span>
+              <span class="info-value">${this.streamStats.bitrate ? `${this.streamStats.bitrate} kbps` : '-'}</span>
+            </div>
+          ` : ''}
           <div class="info-controls">
             <button
               class="info-btn ${!this.muted ? 'active' : ''}"
