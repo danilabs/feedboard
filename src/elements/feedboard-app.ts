@@ -564,6 +564,8 @@ export class FeedboardApp extends LitElement {
   @state() private fullscreenCell: number | null = null
   @state() private sidebarVisible = true
   @state() private showInfo = false
+  @state() private showLabels = true
+  @state() private showVu = true
 
   private client: MediaMTXClient | null = null
   private pollInterval: number | null = null
@@ -748,6 +750,18 @@ export class FeedboardApp extends LitElement {
     // I to toggle info overlay on all cells
     if (e.key === 'i' && !e.ctrlKey && !e.metaKey) {
       this.showInfo = !this.showInfo
+      e.preventDefault()
+    }
+
+    // L to toggle labels
+    if (e.key === 'l' && !e.ctrlKey && !e.metaKey) {
+      this.showLabels = !this.showLabels
+      e.preventDefault()
+    }
+
+    // U to toggle VU meters
+    if (e.key === 'u' && !e.ctrlKey && !e.metaKey) {
+      this.showVu = !this.showVu
       e.preventDefault()
     }
 
@@ -999,7 +1013,10 @@ export class FeedboardApp extends LitElement {
             id="player-${index}"
             src=${cell.src || ''}
             server=${this.getServerUrl()}
+            label=${cell.label || ''}
             ?show-info=${this.showInfo}
+            ?show-label=${this.showLabels}
+            ?show-vu=${this.showVu}
             style="width: 100%; height: 100%;"
           ></feedboard-player>
         `
@@ -1033,6 +1050,8 @@ export class FeedboardApp extends LitElement {
             server=${this.getServerUrl()}
             publish-to=${cell.publishPath || ''}
             ?show-info=${this.showInfo}
+            ?show-label=${this.showLabels}
+            ?show-vu=${this.showVu}
             style="width: 100%; height: 100%;"
           ></feedboard-capture>
         `
@@ -1215,6 +1234,20 @@ export class FeedboardApp extends LitElement {
       <main class="main-area">
         <div class="toolbar ${this.sidebarVisible ? 'visible' : ''}">
           <span>Cell ${this.selectedCell !== null ? this.selectedCell + 1 : '-'}</span>
+          <button
+            class="toolbar-btn ${this.showLabels ? 'active' : ''}"
+            @click=${() => (this.showLabels = !this.showLabels)}
+            title="Toggle labels (L)"
+          >
+            Labels
+          </button>
+          <button
+            class="toolbar-btn ${this.showVu ? 'active' : ''}"
+            @click=${() => (this.showVu = !this.showVu)}
+            title="Toggle VU meters (U)"
+          >
+            VU
+          </button>
           <button
             class="toolbar-btn ${this.showInfo ? 'active' : ''}"
             @click=${() => (this.showInfo = !this.showInfo)}

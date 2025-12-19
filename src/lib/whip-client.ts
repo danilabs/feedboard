@@ -114,19 +114,45 @@ export async function getDevices(): Promise<{
   }
 }
 
-export async function captureCamera(options?: {
+export interface CaptureOptions {
   videoDeviceId?: string
   audioDeviceId?: string
   width?: number
   height?: number
-}): Promise<MediaStream> {
+  frameRate?: number
+  // Audio processing
+  echoCancellation?: boolean
+  noiseSuppression?: boolean
+  autoGainControl?: boolean
+}
+
+export async function captureCamera(options?: CaptureOptions): Promise<MediaStream> {
+  const videoConstraints: MediaTrackConstraints = {
+    width: { ideal: options?.width || 1920 },
+    height: { ideal: options?.height || 1080 },
+  }
+
+  if (options?.videoDeviceId) {
+    videoConstraints.deviceId = { exact: options.videoDeviceId }
+  }
+
+  if (options?.frameRate) {
+    videoConstraints.frameRate = { ideal: options.frameRate }
+  }
+
+  const audioConstraints: MediaTrackConstraints = {
+    echoCancellation: options?.echoCancellation ?? false,
+    noiseSuppression: options?.noiseSuppression ?? false,
+    autoGainControl: options?.autoGainControl ?? false,
+  }
+
+  if (options?.audioDeviceId) {
+    audioConstraints.deviceId = { exact: options.audioDeviceId }
+  }
+
   return navigator.mediaDevices.getUserMedia({
-    video: options?.videoDeviceId
-      ? { deviceId: { exact: options.videoDeviceId }, width: { ideal: options?.width || 1920 }, height: { ideal: options?.height || 1080 } }
-      : { width: { ideal: options?.width || 1920 }, height: { ideal: options?.height || 1080 } },
-    audio: options?.audioDeviceId
-      ? { deviceId: { exact: options.audioDeviceId } }
-      : true,
+    video: videoConstraints,
+    audio: audioConstraints,
   })
 }
 

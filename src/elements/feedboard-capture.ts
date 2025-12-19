@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { WhipClient, getDevices, captureCamera, captureScreen } from '@/lib/whip-client'
+import { PPMMeter, dbfsToPercent, type PPMMeterData } from '@/lib/ppm-meter'
 
 type CaptureType = 'camera' | 'screen' | 'tab'
 type Status = 'idle' | 'previewing' | 'connecting' | 'live' | 'error'
@@ -23,6 +24,10 @@ export class FeedboardCapture extends LitElement {
       width: 100%;
       height: 100%;
       object-fit: contain;
+    }
+
+    video.mirrored {
+      transform: scaleX(-1);
     }
 
     .status-dot {
@@ -161,28 +166,83 @@ export class FeedboardCapture extends LitElement {
       cursor: not-allowed;
     }
 
-    .vu-meter {
+    /* PPM Meter */
+    .ppm-meter {
       position: absolute;
       right: 0.5rem;
       top: 0.5rem;
       bottom: 4rem;
-      width: 6px;
-      background: rgba(0, 0, 0, 0.5);
-      border-radius: 3px;
+      width: 8px;
+      background: rgba(0, 0, 0, 0.7);
+      border-radius: 4px;
       overflow: hidden;
       display: flex;
       flex-direction: column-reverse;
+      z-index: 15;
     }
 
-    .vu-level {
-      background: linear-gradient(to top, #22c55e 0%, #22c55e 60%, #eab308 60%, #eab308 80%, #dc2626 80%);
-      transition: height 0.05s;
+    .ppm-meter.stereo {
+      width: 18px;
+      display: flex;
+      flex-direction: row;
+      gap: 2px;
+      padding: 2px;
+    }
+
+    .ppm-channel {
+      flex: 1;
+      display: flex;
+      flex-direction: column-reverse;
+      position: relative;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .ppm-level {
+      background: linear-gradient(to top,
+        #22c55e 0%,
+        #22c55e 70%,
+        #eab308 70%,
+        #eab308 90%,
+        #dc2626 90%
+      );
+      transition: height 0.02s linear;
       width: 100%;
+    }
+
+    .ppm-peak {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: #fff;
+      transition: bottom 0.02s linear;
     }
 
     .error-text {
       color: #f87171;
       font-size: 0.6rem;
+    }
+
+    /* Label overlay - centered white text over blur */
+    .label-overlay {
+      position: absolute;
+      left: 50%;
+      bottom: 0.75rem;
+      transform: translateX(-50%);
+      padding: 0.25rem 0.75rem;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(8px);
+      border-radius: 4px;
+      color: #fff;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+      z-index: 15;
     }
   `
 
@@ -193,6 +253,8 @@ export class FeedboardCapture extends LitElement {
   @property({ type: String, attribute: 'device-id' }) deviceId = ''
   @property({ type: String }) resolution: '720p' | '1080p' | '4k' = '1080p'
   @property({ type: Boolean, attribute: 'show-info' }) showInfo = false
+  @property({ type: Boolean, attribute: 'show-label' }) showLabel = false
+  @property({ type: Boolean, attribute: 'show-vu' }) showVu = false
 
   // Internal state
   @state() private currentType: CaptureType = 'camera'
@@ -203,15 +265,21 @@ export class FeedboardCapture extends LitElement {
   @state() private selectedMic = ''
   @state() private videoMuted = false
   @state() private audioMuted = false
-  @state() private vuLevel = 0
+  @state() private meterData: PPMMeterData | null = null
   @state() private errorMessage = ''
   @state() private publishPath = ''
 
+  // Capture settings
+  @state() private currentResolution: '720p' | '1080p' | '4k' = '1080p'
+  @state() private frameRate: 24 | 30 | 60 = 30
+  @state() private mirrored = false
+  @state() private echoCancellation = false
+  @state() private noiseSuppression = false
+  @state() private autoGainControl = false
+
   private stream: MediaStream | null = null
   private whipClient: WhipClient | null = null
-  private audioContext: AudioContext | null = null
-  private analyser: AnalyserNode | null = null
-  private vuInterval: number | null = null
+  private ppmMeter: PPMMeter | null = null
 
   async connectedCallback() {
     super.connectedCallback()
@@ -230,11 +298,25 @@ export class FeedboardCapture extends LitElement {
     this.stopCapture()
   }
 
-  private getResolutionConstraints() {
-    switch (this.resolution) {
-      case '720p': return { width: 1280, height: 720 }
-      case '4k': return { width: 3840, height: 2160 }
-      default: return { width: 1920, height: 1080 }
+  private getVideoConstraints() {
+    let width: number, height: number
+    switch (this.currentResolution) {
+      case '720p': width = 1280; height = 720; break
+      case '4k': width = 3840; height = 2160; break
+      default: width = 1920; height = 1080
+    }
+    return {
+      width: { ideal: width },
+      height: { ideal: height },
+      frameRate: { ideal: this.frameRate }
+    }
+  }
+
+  private getAudioConstraints() {
+    return {
+      echoCancellation: this.echoCancellation,
+      noiseSuppression: this.noiseSuppression,
+      autoGainControl: this.autoGainControl
     }
   }
 
@@ -266,10 +348,16 @@ export class FeedboardCapture extends LitElement {
     this.errorMessage = ''
 
     try {
+      const videoConstraints = this.getVideoConstraints()
       this.stream = await captureCamera({
         videoDeviceId: this.selectedCamera || undefined,
         audioDeviceId: this.selectedMic || undefined,
-        ...this.getResolutionConstraints(),
+        width: videoConstraints.width?.ideal as number,
+        height: videoConstraints.height?.ideal as number,
+        frameRate: videoConstraints.frameRate?.ideal as number,
+        echoCancellation: this.echoCancellation,
+        noiseSuppression: this.noiseSuppression,
+        autoGainControl: this.autoGainControl,
       })
       this.attachStream()
     } catch (e) {
@@ -328,47 +416,38 @@ export class FeedboardCapture extends LitElement {
     if (video && this.stream) {
       video.srcObject = this.stream
       video.play()
-      this.startVuMeter()
+      this.startPPMMeter()
     }
   }
 
-  private startVuMeter() {
-    if (!this.stream) return
+  private async startPPMMeter() {
+    if (!this.stream || this.ppmMeter) return
 
     const audioTracks = this.stream.getAudioTracks()
     if (!audioTracks.length) return
 
-    this.audioContext = new AudioContext()
-    const source = this.audioContext.createMediaStreamSource(this.stream)
-    this.analyser = this.audioContext.createAnalyser()
-    this.analyser.fftSize = 256
-    source.connect(this.analyser)
-
-    const dataArray = new Uint8Array(this.analyser.frequencyBinCount)
-
-    this.vuInterval = window.setInterval(() => {
-      if (!this.analyser) return
-      this.analyser.getByteFrequencyData(dataArray)
-      const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length
-      this.vuLevel = Math.min(100, (avg / 128) * 100)
-    }, 50)
+    try {
+      this.ppmMeter = new PPMMeter({
+        onData: (data) => {
+          this.meterData = data
+        }
+      })
+      await this.ppmMeter.connect(this.stream)
+    } catch (e) {
+      console.warn('Could not start PPM meter:', e)
+    }
   }
 
-  private stopVuMeter() {
-    if (this.vuInterval) {
-      clearInterval(this.vuInterval)
-      this.vuInterval = null
+  private stopPPMMeter() {
+    if (this.ppmMeter) {
+      this.ppmMeter.disconnect()
+      this.ppmMeter = null
     }
-    if (this.audioContext) {
-      this.audioContext.close()
-      this.audioContext = null
-    }
-    this.analyser = null
-    this.vuLevel = 0
+    this.meterData = null
   }
 
   private stopCapture() {
-    this.stopVuMeter()
+    this.stopPPMMeter()
     this.stopPublishing()
 
     if (this.stream) {
@@ -444,15 +523,44 @@ export class FeedboardCapture extends LitElement {
     }
   }
 
+  private getDisplayLabel(): string {
+    // For capture, derive label from publish path or type
+    if (this.publishPath) {
+      let path = this.publishPath
+      if (path.startsWith('/')) path = path.slice(1)
+      return path
+    }
+    return this.currentType.toUpperCase()
+  }
+
   render() {
-    const showVu = this.stream && !this.audioMuted && this.showInfo
+    const showPPMMeter = this.stream && !this.audioMuted && this.meterData && (this.showVu || this.showInfo)
+    const showMirror = this.mirrored && this.currentType === 'camera'
 
     return html`
-      <video muted playsinline></video>
+      <video class="${showMirror ? 'mirrored' : ''}" muted playsinline></video>
 
-      ${showVu ? html`
-        <div class="vu-meter">
-          <div class="vu-level" style="height: ${this.vuLevel}%"></div>
+      ${this.showLabel && this.stream ? html`
+        <div class="label-overlay">${this.getDisplayLabel()}</div>
+      ` : ''}
+
+      ${showPPMMeter ? html`
+        <div class="ppm-meter ${this.meterData!.channels > 1 ? 'stereo' : ''}">
+          ${this.meterData!.channels > 1 ? html`
+            <div class="ppm-channel">
+              <div class="ppm-level" style="height: ${dbfsToPercent(this.meterData!.level[0])}%"></div>
+              <div class="ppm-peak" style="bottom: ${dbfsToPercent(this.meterData!.peak[0])}%"></div>
+            </div>
+            <div class="ppm-channel">
+              <div class="ppm-level" style="height: ${dbfsToPercent(this.meterData!.level[1])}%"></div>
+              <div class="ppm-peak" style="bottom: ${dbfsToPercent(this.meterData!.peak[1])}%"></div>
+            </div>
+          ` : html`
+            <div class="ppm-channel">
+              <div class="ppm-level" style="height: ${dbfsToPercent(this.meterData!.level[0])}%"></div>
+              <div class="ppm-peak" style="bottom: ${dbfsToPercent(this.meterData!.peak[0])}%"></div>
+            </div>
+          `}
         </div>
       ` : ''}
 
@@ -500,6 +608,55 @@ export class FeedboardCapture extends LitElement {
                   <option value=${m.deviceId}>${m.label || 'Microphone'}</option>
                 `)}
               </select>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Quality</span>
+              <select
+                class="info-select"
+                .value=${this.currentResolution}
+                @change=${(e: Event) => {
+                  this.currentResolution = (e.target as HTMLSelectElement).value as '720p' | '1080p' | '4k'
+                  if (this.stream) this.startCamera()
+                }}
+              >
+                <option value="720p">720p</option>
+                <option value="1080p">1080p</option>
+                <option value="4k">4K</option>
+              </select>
+              <select
+                class="info-select"
+                .value=${String(this.frameRate)}
+                @change=${(e: Event) => {
+                  this.frameRate = parseInt((e.target as HTMLSelectElement).value) as 24 | 30 | 60
+                  if (this.stream) this.startCamera()
+                }}
+              >
+                <option value="24">24fps</option>
+                <option value="30">30fps</option>
+                <option value="60">60fps</option>
+              </select>
+            </div>
+            <div class="info-row">
+              <button
+                class="info-btn ${this.mirrored ? 'active' : ''}"
+                @click=${() => this.mirrored = !this.mirrored}
+                title="Mirror video"
+              >Mirror</button>
+              <button
+                class="info-btn ${this.echoCancellation ? 'active' : ''}"
+                @click=${() => { this.echoCancellation = !this.echoCancellation; if (this.stream) this.startCamera() }}
+                title="Echo cancellation"
+              >Echo</button>
+              <button
+                class="info-btn ${this.noiseSuppression ? 'active' : ''}"
+                @click=${() => { this.noiseSuppression = !this.noiseSuppression; if (this.stream) this.startCamera() }}
+                title="Noise suppression"
+              >Noise</button>
+              <button
+                class="info-btn ${this.autoGainControl ? 'active' : ''}"
+                @click=${() => { this.autoGainControl = !this.autoGainControl; if (this.stream) this.startCamera() }}
+                title="Auto gain control"
+              >AGC</button>
             </div>
           ` : ''}
 
