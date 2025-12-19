@@ -288,10 +288,56 @@ export class FeedboardCapture extends LitElement {
   private whipClient: WhipClient | null = null
   private ppmMeter: PPMMeter | null = null
 
+  private static STORAGE_KEY = 'feedboard-capture-settings'
+
+  private loadSettings() {
+    try {
+      const saved = localStorage.getItem(FeedboardCapture.STORAGE_KEY)
+      if (saved) {
+        const settings = JSON.parse(saved)
+        // Apply saved settings, falling back to defaults/attributes
+        this.selectedCamera = settings.selectedCamera || ''
+        this.selectedMic = settings.selectedMic || ''
+        this.currentResolution = settings.resolution || this.resolution
+        this.frameRate = settings.frameRate || 30
+        this.mirrored = settings.mirrored ?? false
+        this.echoCancellation = settings.echoCancellation ?? false
+        this.noiseSuppression = settings.noiseSuppression ?? false
+        this.autoGainControl = settings.autoGainControl ?? false
+        this.publishPath = settings.publishPath || this.publishTo
+      }
+    } catch (e) {
+      console.warn('Could not load capture settings:', e)
+    }
+  }
+
+  private saveSettings() {
+    try {
+      const settings = {
+        selectedCamera: this.selectedCamera,
+        selectedMic: this.selectedMic,
+        resolution: this.currentResolution,
+        frameRate: this.frameRate,
+        mirrored: this.mirrored,
+        echoCancellation: this.echoCancellation,
+        noiseSuppression: this.noiseSuppression,
+        autoGainControl: this.autoGainControl,
+        publishPath: this.publishPath,
+      }
+      localStorage.setItem(FeedboardCapture.STORAGE_KEY, JSON.stringify(settings))
+    } catch (e) {
+      console.warn('Could not save capture settings:', e)
+    }
+  }
+
   async connectedCallback() {
     super.connectedCallback()
     this.currentType = this.type
     this.publishPath = this.publishTo
+
+    // Load saved settings first
+    this.loadSettings()
+
     await this.loadDevices()
 
     // Auto-start camera by default
@@ -332,12 +378,21 @@ export class FeedboardCapture extends LitElement {
       const { cameras, microphones } = await getDevices()
       this.cameras = cameras
       this.microphones = microphones
+
+      // Priority: attribute > saved setting > first available
       if (this.deviceId) {
         this.selectedCamera = this.deviceId
+      } else if (this.selectedCamera && cameras.some(c => c.deviceId === this.selectedCamera)) {
+        // Keep saved camera if still available
       } else if (cameras.length) {
         this.selectedCamera = cameras[0].deviceId
       }
-      if (microphones.length) this.selectedMic = microphones[0].deviceId
+
+      if (this.selectedMic && microphones.some(m => m.deviceId === this.selectedMic)) {
+        // Keep saved mic if still available
+      } else if (microphones.length) {
+        this.selectedMic = microphones[0].deviceId
+      }
     } catch (e) {
       console.warn('Could not enumerate devices:', e)
     }
@@ -518,6 +573,7 @@ export class FeedboardCapture extends LitElement {
 
   private handleCameraChange(e: Event) {
     this.selectedCamera = (e.target as HTMLSelectElement).value
+    this.saveSettings()
     if (this.status === 'previewing' && this.currentType === 'camera') {
       this.startCamera()
     }
@@ -525,6 +581,7 @@ export class FeedboardCapture extends LitElement {
 
   private handleMicChange(e: Event) {
     this.selectedMic = (e.target as HTMLSelectElement).value
+    this.saveSettings()
     if (this.status === 'previewing' && this.currentType === 'camera') {
       this.startCamera()
     }
@@ -596,11 +653,10 @@ export class FeedboardCapture extends LitElement {
               <span class="info-label">Camera</span>
               <select
                 class="info-select"
-                .value=${this.selectedCamera}
                 @change=${this.handleCameraChange}
               >
                 ${this.cameras.map(c => html`
-                  <option value=${c.deviceId}>${c.label || 'Camera'}</option>
+                  <option value=${c.deviceId} ?selected=${c.deviceId === this.selectedCamera}>${c.label || 'Camera'}</option>
                 `)}
               </select>
             </div>
@@ -608,11 +664,10 @@ export class FeedboardCapture extends LitElement {
               <span class="info-label">Mic</span>
               <select
                 class="info-select"
-                .value=${this.selectedMic}
                 @change=${this.handleMicChange}
               >
                 ${this.microphones.map(m => html`
-                  <option value=${m.deviceId}>${m.label || 'Microphone'}</option>
+                  <option value=${m.deviceId} ?selected=${m.deviceId === this.selectedMic}>${m.label || 'Microphone'}</option>
                 `)}
               </select>
             </div>
@@ -620,48 +675,48 @@ export class FeedboardCapture extends LitElement {
               <span class="info-label">Quality</span>
               <select
                 class="info-select"
-                .value=${this.currentResolution}
                 @change=${(e: Event) => {
                   this.currentResolution = (e.target as HTMLSelectElement).value as '720p' | '1080p' | '4k'
+                  this.saveSettings()
                   if (this.stream) this.startCamera()
                 }}
               >
-                <option value="720p">720p</option>
-                <option value="1080p">1080p</option>
-                <option value="4k">4K</option>
+                <option value="720p" ?selected=${this.currentResolution === '720p'}>720p</option>
+                <option value="1080p" ?selected=${this.currentResolution === '1080p'}>1080p</option>
+                <option value="4k" ?selected=${this.currentResolution === '4k'}>4K</option>
               </select>
               <select
                 class="info-select"
-                .value=${String(this.frameRate)}
                 @change=${(e: Event) => {
                   this.frameRate = parseInt((e.target as HTMLSelectElement).value) as 24 | 30 | 60
+                  this.saveSettings()
                   if (this.stream) this.startCamera()
                 }}
               >
-                <option value="24">24fps</option>
-                <option value="30">30fps</option>
-                <option value="60">60fps</option>
+                <option value="24" ?selected=${this.frameRate === 24}>24fps</option>
+                <option value="30" ?selected=${this.frameRate === 30}>30fps</option>
+                <option value="60" ?selected=${this.frameRate === 60}>60fps</option>
               </select>
             </div>
             <div class="info-row">
               <button
                 class="info-btn ${this.mirrored ? 'active' : ''}"
-                @click=${() => this.mirrored = !this.mirrored}
+                @click=${() => { this.mirrored = !this.mirrored; this.saveSettings() }}
                 title="Mirror video"
               >Mirror</button>
               <button
                 class="info-btn ${this.echoCancellation ? 'active' : ''}"
-                @click=${() => { this.echoCancellation = !this.echoCancellation; if (this.stream) this.startCamera() }}
+                @click=${() => { this.echoCancellation = !this.echoCancellation; this.saveSettings(); if (this.stream) this.startCamera() }}
                 title="Echo cancellation"
               >Echo</button>
               <button
                 class="info-btn ${this.noiseSuppression ? 'active' : ''}"
-                @click=${() => { this.noiseSuppression = !this.noiseSuppression; if (this.stream) this.startCamera() }}
+                @click=${() => { this.noiseSuppression = !this.noiseSuppression; this.saveSettings(); if (this.stream) this.startCamera() }}
                 title="Noise suppression"
               >Noise</button>
               <button
                 class="info-btn ${this.autoGainControl ? 'active' : ''}"
-                @click=${() => { this.autoGainControl = !this.autoGainControl; if (this.stream) this.startCamera() }}
+                @click=${() => { this.autoGainControl = !this.autoGainControl; this.saveSettings(); if (this.stream) this.startCamera() }}
                 title="Auto gain control"
               >AGC</button>
             </div>
@@ -674,7 +729,7 @@ export class FeedboardCapture extends LitElement {
               type="text"
               placeholder="/path"
               .value=${this.publishPath}
-              @input=${(e: Event) => this.publishPath = (e.target as HTMLInputElement).value}
+              @input=${(e: Event) => { this.publishPath = (e.target as HTMLInputElement).value; this.saveSettings() }}
             />
           </div>
 
