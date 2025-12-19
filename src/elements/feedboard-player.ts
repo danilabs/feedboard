@@ -380,6 +380,77 @@ export class FeedboardPlayer extends LitElement {
       background: rgba(255, 255, 255, 0.2);
     }
 
+    /* Click to play overlay */
+    .click-to-play {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.6);
+      cursor: pointer;
+      z-index: 25;
+    }
+
+    .play-button {
+      width: 64px;
+      height: 64px;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.15s, background 0.15s;
+    }
+
+    .play-button:hover {
+      transform: scale(1.1);
+      background: #fff;
+    }
+
+    .play-button::after {
+      content: '';
+      width: 0;
+      height: 0;
+      border-style: solid;
+      border-width: 12px 0 12px 20px;
+      border-color: transparent transparent transparent #000;
+      margin-left: 4px;
+    }
+
+    /* Play button inside slate */
+    .play-button-slate {
+      width: clamp(48px, 12cqw, 80px);
+      height: clamp(48px, 12cqw, 80px);
+      background: rgba(255, 255, 255, 0.15);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.15s, background 0.15s, border-color 0.15s;
+    }
+
+    .play-button-slate:hover {
+      transform: scale(1.1);
+      background: rgba(255, 255, 255, 0.25);
+      border-color: rgba(255, 255, 255, 0.5);
+    }
+
+    .play-button-slate::after {
+      content: '';
+      width: 0;
+      height: 0;
+      border-style: solid;
+      border-width: clamp(8px, 2cqw, 14px) 0 clamp(8px, 2cqw, 14px) clamp(14px, 3.5cqw, 24px);
+      border-color: transparent transparent transparent currentColor;
+      margin-left: clamp(3px, 0.8cqw, 6px);
+    }
+
   `
 
   @property({ type: String }) src = ''
@@ -400,6 +471,7 @@ export class FeedboardPlayer extends LitElement {
 
   @state() status: Status = 'idle'
   @state() private errorMessage = ''
+  @state() private needsClick = false
   @state() activeProtocol: 'whep' | 'hls' | null = null
   @property({ type: Boolean, attribute: 'show-info' }) showInfo = false
 
@@ -415,6 +487,7 @@ export class FeedboardPlayer extends LitElement {
   private hlsPlayer: HlsPlayer | null = null
   private videoElement: HTMLVideoElement | null = null
   private ppmMeter: PPMMeter | null = null
+  private hasConnected = false
 
   connectedCallback() {
     super.connectedCallback()
@@ -536,7 +609,19 @@ export class FeedboardPlayer extends LitElement {
         this.whepClient = new WhepClient(urls.whepUrl)
         const stream = await this.whepClient.connect()
         this.videoElement.srcObject = stream
-        await this.videoElement.play()
+        try {
+          await this.videoElement.play()
+        } catch (playError) {
+          // Autoplay blocked - need user interaction
+          if (playError instanceof Error && playError.name === 'NotAllowedError') {
+            this.needsClick = true
+            this.status = 'playing' // Stream is connected, just paused
+            this.hasConnected = true
+            this.activeProtocol = 'whep'
+            return
+          }
+          throw playError
+        }
         this.activeProtocol = 'whep'
         // Start PPM meter for WHEP streams (has audio track access)
         if (this.showVu) {
@@ -551,6 +636,8 @@ export class FeedboardPlayer extends LitElement {
       }
 
       this.status = 'playing'
+      this.hasConnected = true
+      this.needsClick = false
       this.dispatchEvent(new CustomEvent('playing'))
     } catch (error) {
       this.status = 'error'
@@ -607,12 +694,48 @@ export class FeedboardPlayer extends LitElement {
         this.stopPPMMeter()
       }
     }
+
+    // Reconnect if src changed after we've already connected once
+    if (changedProperties.has('src') && this.hasConnected && this.src) {
+      this.connect()
+    }
   }
 
   private toggleMute() {
     this.muted = !this.muted
     if (this.videoElement) {
       this.videoElement.muted = this.muted
+    }
+  }
+
+  private async handlePlayClick() {
+    if (this.videoElement) {
+      try {
+        await this.videoElement.play()
+        this.needsClick = false
+        if (this.showVu && this.activeProtocol === 'whep') {
+          this.startPPMMeter()
+        }
+        // Notify parent that user has interacted - other players can retry
+        this.dispatchEvent(new CustomEvent('user-gesture', { bubbles: true, composed: true }))
+      } catch (e) {
+        console.warn('Play failed:', e)
+      }
+    }
+  }
+
+  /** Public method - retry playback after user gesture elsewhere */
+  async retryPlay(): Promise<void> {
+    if (this.needsClick && this.videoElement) {
+      try {
+        await this.videoElement.play()
+        this.needsClick = false
+        if (this.showVu && this.activeProtocol === 'whep') {
+          this.startPPMMeter()
+        }
+      } catch (e) {
+        // Still needs direct interaction
+      }
     }
   }
 
@@ -630,7 +753,8 @@ export class FeedboardPlayer extends LitElement {
 
   render() {
     const isError = this.status === 'error'
-    const showSlate = this.status !== 'playing'
+    // Show slate when not playing, OR when waiting for click interaction
+    const showSlate = this.status !== 'playing' || this.needsClick
 
     const bg = isError ? this.errorBackground : this.slateBackground
     const color = isError ? this.errorColor : this.slateColor
@@ -642,6 +766,9 @@ export class FeedboardPlayer extends LitElement {
         style="background: ${bg}; color: ${color};"
       >
         ${this.status === 'connecting' ? html`<div class="spinner"></div>` : ''}
+        ${this.needsClick ? html`
+          <div class="play-button-slate" @click=${this.handlePlayClick}></div>
+        ` : ''}
         <div class="slate-text">${this.src || 'No source'}</div>
         ${this.status === 'connecting'
           ? html`<div class="slate-subtext">Connecting...</div>`
@@ -649,9 +776,11 @@ export class FeedboardPlayer extends LitElement {
             ? html`<div class="slate-subtext">${this.errorMessage}</div>`
             : this.status === 'idle'
               ? html`<div class="slate-subtext">Waiting</div>`
-              : ''}
+              : this.needsClick
+                ? html`<div class="slate-subtext">Click to play</div>`
+                : ''}
       </div>
-      ${this.showLabel && this.status === 'playing' ? html`
+      ${this.showLabel && this.status === 'playing' && !this.needsClick ? html`
         <div class="label-overlay">${this.getDisplayLabel()}</div>
       ` : ''}
       ${this.showVu && this.meterData ? html`

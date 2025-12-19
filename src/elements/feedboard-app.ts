@@ -661,6 +661,7 @@ export class FeedboardApp extends LitElement {
     document.addEventListener('fullscreenchange', this.handleFullscreenChange)
     this.addEventListener('mousemove', this.handleMouseActivity)
     this.addEventListener('touchstart', this.handleMouseActivity)
+    this.addEventListener('user-gesture', this.handleUserGesture)
   }
 
   private saveState() {
@@ -713,6 +714,7 @@ export class FeedboardApp extends LitElement {
     document.removeEventListener('fullscreenchange', this.handleFullscreenChange)
     this.removeEventListener('mousemove', this.handleMouseActivity)
     this.removeEventListener('touchstart', this.handleMouseActivity)
+    this.removeEventListener('user-gesture', this.handleUserGesture)
   }
 
   private handleFullscreenChange = () => {
@@ -723,6 +725,14 @@ export class FeedboardApp extends LitElement {
       this.classList.remove('fullscreen')
       this.fullscreenCell = null
     }
+  }
+
+  private handleUserGesture = () => {
+    // User clicked play on one video - retry all other players
+    const players = this.shadowRoot?.querySelectorAll('feedboard-player') as NodeListOf<any>
+    players?.forEach((player) => {
+      player.retryPlay?.()
+    })
   }
 
   private showUI() {
