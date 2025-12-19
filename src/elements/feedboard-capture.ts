@@ -2,6 +2,7 @@ import { LitElement, html, css } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { WhipClient, getDevices, captureCamera, captureScreen } from '@/lib/whip-client'
 import { PPMMeter, dbfsToPercent, type PPMMeterData } from '@/lib/ppm-meter'
+import { icons } from '@/lib/icons'
 
 type CaptureType = 'camera' | 'screen' | 'tab'
 type Status = 'idle' | 'previewing' | 'connecting' | 'live' | 'error'
@@ -164,6 +165,12 @@ export class FeedboardCapture extends LitElement {
     .info-btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+
+    .info-btn svg {
+      width: 1em;
+      height: 1em;
+      vertical-align: -0.125em;
     }
 
     /* PPM Meter */
@@ -676,15 +683,15 @@ export class FeedboardCapture extends LitElement {
               class="info-btn ${!this.videoMuted ? 'active' : ''}"
               @click=${this.toggleVideoMute}
               ?disabled=${!this.stream}
-            >${this.videoMuted ? 'Video Off' : 'Video On'}</button>
+            >${this.videoMuted ? icons.videoOff : icons.video} ${this.videoMuted ? 'Off' : 'On'}</button>
             <button
               class="info-btn ${!this.audioMuted ? 'active' : ''}"
               @click=${this.toggleAudioMute}
               ?disabled=${!this.stream}
-            >${this.audioMuted ? 'Audio Off' : 'Audio On'}</button>
+            >${this.audioMuted ? icons.micOff : icons.mic} ${this.audioMuted ? 'Off' : 'On'}</button>
             ${this.status === 'live' ? html`
               <button class="info-btn publish live" @click=${this.stopPublishing}>
-                Stop
+                ${icons.stop} Stop
               </button>
             ` : html`
               <button
@@ -692,11 +699,11 @@ export class FeedboardCapture extends LitElement {
                 @click=${this.startPublishing}
                 ?disabled=${!this.stream || this.status === 'connecting' || !this.publishPath}
               >
-                ${this.status === 'connecting' ? '...' : 'Publish'}
+                ${this.status === 'connecting' ? '...' : html`${icons.radio} Publish`}
               </button>
             `}
             <button class="info-btn" @click=${this.stopCapture} ?disabled=${this.status === 'idle'}>
-              Stop
+              ${icons.stop} Stop
             </button>
           </div>
 

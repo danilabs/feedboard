@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js'
 import { WhepClient } from '@/lib/whep-client'
 import { HlsPlayer } from '@/lib/hls-player'
 import { PPMMeter, dbfsToPercent, type PPMMeterData } from '@/lib/ppm-meter'
+import { icons } from '@/lib/icons'
 
 type Protocol = 'auto' | 'whep' | 'hls'
 type FitMode = 'contain' | 'cover' | 'fill'
@@ -276,6 +277,12 @@ export class FeedboardPlayer extends LitElement {
       background: rgba(220, 38, 38, 0.8);
       border-color: #dc2626;
       color: #fff;
+    }
+
+    .info-btn svg {
+      width: 1em;
+      height: 1em;
+      vertical-align: -0.125em;
     }
 
     /* Label overlay - centered white text over blur */
@@ -692,11 +699,11 @@ export class FeedboardPlayer extends LitElement {
             <button
               class="info-btn ${!this.muted ? 'active' : ''}"
               @click=${this.toggleMute}
-            >${this.muted ? 'Unmute' : 'Mute'}</button>
+            >${this.muted ? icons.micOff : icons.mic} ${this.muted ? 'Muted' : 'Audio'}</button>
             <button
               class="info-btn"
               @click=${this.reconnect}
-            >Reconnect</button>
+            >${icons.refresh} Reconnect</button>
           </div>
         </div>
       ` : ''}

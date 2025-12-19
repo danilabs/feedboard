@@ -2,6 +2,7 @@ import { LitElement, html, css } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { MediaMTXClient } from '@/lib/mediamtx-api'
 import type { MediaMTXPath } from '@/types/mediamtx'
+import { icons } from '@/lib/icons'
 
 type GridLayout = '1x1' | '2x2' | '3x3' | '4x4'
 
@@ -36,11 +37,21 @@ export class FeedboardApp extends LitElement {
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      flex-shrink: 0;
+      margin-left: -280px;
+      transition: margin-left 0.2s ease;
+    }
+
+    .sidebar.visible {
+      margin-left: 0;
     }
 
     .sidebar-header {
       padding: 1rem;
       border-bottom: 1px solid #222;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
     }
 
     .sidebar-header h1 {
@@ -199,6 +210,17 @@ export class FeedboardApp extends LitElement {
       padding: 0.75rem 1rem;
       background: #141414;
       border-bottom: 1px solid #222;
+      height: 0;
+      padding: 0;
+      overflow: hidden;
+      opacity: 0;
+      transition: all 0.2s ease;
+    }
+
+    .toolbar.visible {
+      height: auto;
+      padding: 0.75rem 1rem;
+      opacity: 1;
     }
 
     .toolbar-btn {
@@ -221,10 +243,6 @@ export class FeedboardApp extends LitElement {
       background: #2563eb;
       border-color: #3b82f6;
       color: #fff;
-    }
-
-    .toolbar-clock {
-      margin-left: auto;
     }
 
     .grid-container {
@@ -372,47 +390,74 @@ export class FeedboardApp extends LitElement {
       background: #2563eb;
     }
 
-    /* Fullscreen modes */
-    :host(.fullscreen) .sidebar {
+    /* Floating open button */
+    .open-btn {
       position: fixed;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      z-index: 100;
-      transform: translateX(-100%);
-      transition: transform 0.2s ease;
-    }
-
-    :host(.fullscreen) .sidebar.visible {
-      transform: translateX(0);
-    }
-
-    :host(.fullscreen) .toolbar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
+      top: 1rem;
+      left: 1rem;
+      width: 40px;
+      height: 40px;
+      background: rgba(0, 0, 0, 0.7);
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
       z-index: 50;
-      transform: translateY(-100%);
-      transition: transform 0.2s ease;
+      opacity: 0;
+      transform: scale(0.9);
+      transition: opacity 0.15s, transform 0.15s;
+      pointer-events: none;
     }
 
-    :host(.fullscreen) .toolbar.visible {
-      transform: translateY(0);
+    .open-btn.visible {
+      opacity: 1;
+      transform: scale(1);
+      pointer-events: auto;
     }
 
+    .open-btn:hover {
+      background: rgba(37, 99, 235, 0.8);
+      border-color: #3b82f6;
+    }
+
+    .open-btn svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    /* Close button in sidebar */
+    .close-btn {
+      width: 28px;
+      height: 28px;
+      background: transparent;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #888;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: auto;
+      transition: all 0.15s;
+    }
+
+    .close-btn:hover {
+      background: #333;
+      color: #fff;
+    }
+
+    .close-btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* Fullscreen mode */
     :host(.fullscreen) .grid-container {
       padding: 0;
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      transition: left 0.2s ease;
-    }
-
-    :host(.fullscreen) .grid-container.sidebar-open {
-      left: 220px;
     }
 
     /* Cell fullscreen */
@@ -562,14 +607,15 @@ export class FeedboardApp extends LitElement {
   @state() private loading = false
   @state() private isFullscreen = false
   @state() private fullscreenCell: number | null = null
-  @state() private sidebarVisible = true
+  @state() private uiVisible = false
+  @state() private showOpenButton = false
   @state() private showInfo = false
   @state() private showLabels = true
   @state() private showVu = true
 
   private client: MediaMTXClient | null = null
   private pollInterval: number | null = null
-  private mouseTimeout: number | null = null
+  private openButtonTimeout: number | null = null
 
   // Common timezones for dropdown
   private timezones = [
@@ -613,7 +659,8 @@ export class FeedboardApp extends LitElement {
     // Event listeners
     window.addEventListener('keydown', this.handleKeydown)
     document.addEventListener('fullscreenchange', this.handleFullscreenChange)
-    this.addEventListener('mousemove', this.handleMouseMove)
+    this.addEventListener('mousemove', this.handleMouseActivity)
+    this.addEventListener('touchstart', this.handleMouseActivity)
   }
 
   private saveState() {
@@ -659,39 +706,52 @@ export class FeedboardApp extends LitElement {
     if (this.pollInterval) {
       clearInterval(this.pollInterval)
     }
-    if (this.mouseTimeout) {
-      clearTimeout(this.mouseTimeout)
+    if (this.openButtonTimeout) {
+      clearTimeout(this.openButtonTimeout)
     }
     window.removeEventListener('keydown', this.handleKeydown)
     document.removeEventListener('fullscreenchange', this.handleFullscreenChange)
-    this.removeEventListener('mousemove', this.handleMouseMove)
+    this.removeEventListener('mousemove', this.handleMouseActivity)
+    this.removeEventListener('touchstart', this.handleMouseActivity)
   }
 
   private handleFullscreenChange = () => {
     this.isFullscreen = !!document.fullscreenElement
     if (this.isFullscreen) {
       this.classList.add('fullscreen')
-      this.sidebarVisible = false
     } else {
       this.classList.remove('fullscreen')
-      this.sidebarVisible = true
       this.fullscreenCell = null
     }
   }
 
-  private handleMouseMove = () => {
-    if (!this.isFullscreen) return
-
-    this.sidebarVisible = true
-
-    if (this.mouseTimeout) {
-      clearTimeout(this.mouseTimeout)
+  private showUI() {
+    this.uiVisible = true
+    this.showOpenButton = false
+    if (this.openButtonTimeout) {
+      clearTimeout(this.openButtonTimeout)
+      this.openButtonTimeout = null
     }
+  }
 
-    this.mouseTimeout = window.setTimeout(() => {
-      if (this.isFullscreen) {
-        this.sidebarVisible = false
-      }
+  private hideUI() {
+    this.uiVisible = false
+    this.selectedCell = null
+  }
+
+  private handleMouseActivity = () => {
+    // Don't show open button if UI is already visible
+    if (this.uiVisible) return
+
+    // Show the open button
+    this.showOpenButton = true
+
+    // Hide it after 2 seconds of no movement
+    if (this.openButtonTimeout) {
+      clearTimeout(this.openButtonTimeout)
+    }
+    this.openButtonTimeout = window.setTimeout(() => {
+      this.showOpenButton = false
     }, 2000)
   }
 
@@ -701,15 +761,15 @@ export class FeedboardApp extends LitElement {
     const target = (e.composedPath()[0] || e.target) as HTMLElement
     const isInput = target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA'
 
-    // Escape to exit cell fullscreen or info (works even in inputs)
+    // Escape to close UI, exit cell fullscreen, or hide info (works even in inputs)
     if (e.key === 'Escape') {
       if (this.fullscreenCell !== null) {
         this.fullscreenCell = null
         e.preventDefault()
         return
       }
-      if (this.showInfo) {
-        this.showInfo = false
+      if (this.uiVisible) {
+        this.hideUI()
         e.preventDefault()
         return
       }
@@ -717,6 +777,15 @@ export class FeedboardApp extends LitElement {
 
     // Skip all other shortcuts when typing in inputs
     if (isInput) return
+
+    // S or Space to show UI
+    if (e.key === 's' || e.key === ' ') {
+      if (!this.uiVisible) {
+        this.showUI()
+      }
+      e.preventDefault()
+      return
+    }
 
     // 0 to deselect and exit cell fullscreen
     if (e.key === '0') {
@@ -1126,10 +1195,19 @@ export class FeedboardApp extends LitElement {
 
   render() {
     return html`
-      <aside class="sidebar ${this.sidebarVisible ? 'visible' : ''}">
+      <button
+        class="open-btn ${this.showOpenButton && !this.uiVisible ? 'visible' : ''}"
+        @click=${() => this.showUI()}
+        title="Open settings (S)"
+      >${icons.menu}</button>
+
+      <aside class="sidebar ${this.uiVisible ? 'visible' : ''}">
         <div class="sidebar-header">
-          <h1>Feedboard</h1>
-          <div class="subtitle">MediaMTX Multiview</div>
+          <div>
+            <h1>Feedboard</h1>
+            <div class="subtitle">MediaMTX Multiview</div>
+          </div>
+          <button class="close-btn" @click=${() => this.hideUI()} title="Close (Esc)">${icons.x}</button>
         </div>
 
         <div class="controls">
@@ -1232,25 +1310,25 @@ export class FeedboardApp extends LitElement {
       </aside>
 
       <main class="main-area">
-        <div class="toolbar ${this.sidebarVisible ? 'visible' : ''}">
+        <div class="toolbar ${this.uiVisible ? 'visible' : ''}">
           <span>Cell ${this.selectedCell !== null ? this.selectedCell + 1 : '-'}</span>
           <button
             class="toolbar-btn ${this.showLabels ? 'active' : ''}"
-            @click=${() => (this.showLabels = !this.showLabels)}
+            @click=${() => this.showLabels = !this.showLabels}
             title="Toggle labels (L)"
           >
             Labels
           </button>
           <button
             class="toolbar-btn ${this.showVu ? 'active' : ''}"
-            @click=${() => (this.showVu = !this.showVu)}
+            @click=${() => this.showVu = !this.showVu}
             title="Toggle VU meters (U)"
           >
             VU
           </button>
           <button
             class="toolbar-btn ${this.showInfo ? 'active' : ''}"
-            @click=${() => (this.showInfo = !this.showInfo)}
+            @click=${() => this.showInfo = !this.showInfo}
             title="Toggle info overlay (I)"
           >
             Info
@@ -1262,12 +1340,9 @@ export class FeedboardApp extends LitElement {
           >
             ${this.isFullscreen ? 'Exit' : 'Fullscreen'}
           </button>
-          <span class="toolbar-clock">
-            <feedboard-clock format="HH:mm:ss"></feedboard-clock>
-          </span>
         </div>
 
-        <div class="grid-container ${this.isFullscreen && this.sidebarVisible ? 'sidebar-open' : ''}">
+        <div class="grid-container">
           <feedboard-grid layout=${this.layout} gap="4px">
             ${this.cells.map((cell, i) => this.renderCell(cell, i))}
           </feedboard-grid>
