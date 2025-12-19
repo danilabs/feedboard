@@ -129,21 +129,43 @@ export class FeedboardApp extends LitElement {
     .streams-list {
       flex: 1;
       overflow-y: auto;
-      padding: 0 0.5rem;
+      padding: 0 0.5rem 0.5rem;
+      min-height: 0;
+      scrollbar-width: thin;
+      scrollbar-color: #333 transparent;
+    }
+
+    .streams-list::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .streams-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .streams-list::-webkit-scrollbar-thumb {
+      background: #333;
+      border-radius: 3px;
+    }
+
+    .streams-list::-webkit-scrollbar-thumb:hover {
+      background: #444;
     }
 
     .stream-item {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
-      padding: 0.75rem;
-      border-radius: 6px;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      margin-bottom: 2px;
+      border-radius: 4px;
       cursor: pointer;
       transition: background 0.15s;
+      background: #1a1a1a;
     }
 
     .stream-item:hover {
-      background: #1f1f1f;
+      background: #252525;
     }
 
     .stream-item.selected {
@@ -151,10 +173,11 @@ export class FeedboardApp extends LitElement {
     }
 
     .stream-status {
-      width: 8px;
-      height: 8px;
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
-      background: #666;
+      background: #444;
+      flex-shrink: 0;
     }
 
     .stream-status.ready {
@@ -163,27 +186,39 @@ export class FeedboardApp extends LitElement {
 
     .stream-name {
       flex: 1;
-      font-size: 0.875rem;
+      font-size: 0.8rem;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
     .stream-readers {
-      font-size: 0.75rem;
-      color: #666;
+      font-size: 0.7rem;
+      color: #555;
+      min-width: 1rem;
+      text-align: right;
     }
 
     .pop-out-btn {
-      padding: 0.25rem 0.4rem;
+      width: 24px;
+      height: 24px;
+      padding: 0;
       background: transparent;
-      border: 1px solid #444;
-      border-radius: 3px;
-      color: #888;
+      border: none;
+      border-radius: 4px;
+      color: #555;
       cursor: pointer;
-      font-size: 0.65rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       opacity: 0;
       transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .pop-out-btn svg {
+      width: 14px;
+      height: 14px;
     }
 
     .stream-item:hover .pop-out-btn {
@@ -192,7 +227,6 @@ export class FeedboardApp extends LitElement {
 
     .pop-out-btn:hover {
       background: #333;
-      border-color: #666;
       color: #fff;
     }
 
@@ -617,29 +651,35 @@ export class FeedboardApp extends LitElement {
   private pollInterval: number | null = null
   private openButtonTimeout: number | null = null
 
-  // Common timezones for dropdown
-  private timezones = [
-    { value: '', label: 'Local' },
-    { value: 'America/New_York', label: 'New York (EST)' },
-    { value: 'America/Chicago', label: 'Chicago (CST)' },
-    { value: 'America/Denver', label: 'Denver (MST)' },
-    { value: 'America/Los_Angeles', label: 'Los Angeles (PST)' },
-    { value: 'America/Anchorage', label: 'Anchorage (AKST)' },
-    { value: 'Pacific/Honolulu', label: 'Honolulu (HST)' },
-    { value: 'Europe/London', label: 'London (GMT)' },
-    { value: 'Europe/Paris', label: 'Paris (CET)' },
-    { value: 'Europe/Berlin', label: 'Berlin (CET)' },
-    { value: 'Europe/Moscow', label: 'Moscow (MSK)' },
-    { value: 'Asia/Dubai', label: 'Dubai (GST)' },
-    { value: 'Asia/Kolkata', label: 'Mumbai (IST)' },
-    { value: 'Asia/Singapore', label: 'Singapore (SGT)' },
-    { value: 'Asia/Hong_Kong', label: 'Hong Kong (HKT)' },
-    { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
-    { value: 'Asia/Seoul', label: 'Seoul (KST)' },
-    { value: 'Australia/Sydney', label: 'Sydney (AEST)' },
-    { value: 'Pacific/Auckland', label: 'Auckland (NZST)' },
-    { value: 'UTC', label: 'UTC' },
-  ]
+  // Get all IANA timezones from the browser
+  private getTimezones(): string[] {
+    try {
+      return Intl.supportedValuesOf('timeZone')
+    } catch {
+      // Fallback for older browsers
+      return [
+        'UTC',
+        'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+        'Europe/London', 'Europe/Paris', 'Europe/Berlin',
+        'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Singapore',
+        'Australia/Sydney', 'Pacific/Auckland'
+      ]
+    }
+  }
+
+  private formatTimezoneLabel(tz: string): string {
+    // Convert "America/New_York" to "New York" and show current offset
+    const city = tz.split('/').pop()?.replace(/_/g, ' ') || tz
+    try {
+      const now = new Date()
+      const offset = new Intl.DateTimeFormat('en', { timeZone: tz, timeZoneName: 'short' })
+        .formatToParts(now)
+        .find(p => p.type === 'timeZoneName')?.value || ''
+      return `${city} (${offset})`
+    } catch {
+      return city
+    }
+  }
 
   @state() private selectedTimezone = ''
   @state() private clockLabel = 'Local'
@@ -993,8 +1033,11 @@ export class FeedboardApp extends LitElement {
 
   private handleTimezoneChange(value: string) {
     this.selectedTimezone = value
-    const tz = this.timezones.find((t) => t.value === value)
-    this.clockLabel = tz?.label || 'Local'
+    if (value === '') {
+      this.clockLabel = 'Local'
+    } else {
+      this.clockLabel = this.formatTimezoneLabel(value)
+    }
   }
 
   private addClockToCell() {
@@ -1263,7 +1306,7 @@ export class FeedboardApp extends LitElement {
                     this.openStreamWindow(stream.name)
                   }}
                   title="Open in new window"
-                >POP</button>
+                >${icons.plusSquare}</button>
               </div>
             `
           )}
@@ -1273,11 +1316,11 @@ export class FeedboardApp extends LitElement {
         <div class="clock-controls">
           <select
             class="tz-select"
-            .value=${this.selectedTimezone}
             @change=${(e: Event) => this.handleTimezoneChange((e.target as HTMLSelectElement).value)}
           >
-            ${this.timezones.map(
-              (tz) => html`<option value=${tz.value}>${tz.label}</option>`
+            <option value="" ?selected=${this.selectedTimezone === ''}>Local</option>
+            ${this.getTimezones().map(
+              (tz) => html`<option value=${tz} ?selected=${tz === this.selectedTimezone}>${this.formatTimezoneLabel(tz)}</option>`
             )}
           </select>
           <input
@@ -1302,10 +1345,10 @@ export class FeedboardApp extends LitElement {
         </div>
 
         <div class="section-header">Capture</div>
-        <div class="streams-list">
+        <div class="sources-list">
           <div class="stream-item" @click=${() => this.addCaptureToCell()}>
             <div class="stream-status ready"></div>
-            <span class="stream-name">Capture</span>
+            <span class="stream-name">Camera / Screen</span>
             <button
               class="pop-out-btn"
               @click=${(e: Event) => {
@@ -1313,7 +1356,7 @@ export class FeedboardApp extends LitElement {
                 this.openCaptureWindow()
               }}
               title="Open in new window"
-            >POP</button>
+            >${icons.plusSquare}</button>
           </div>
         </div>
 
