@@ -68,46 +68,48 @@ export class FeedboardApp extends LitElement {
     }
 
     .controls {
-      padding: 1rem;
+      padding: 0.75rem;
       border-bottom: 1px solid #222;
     }
 
     .layout-buttons {
       display: flex;
-      gap: 0.5rem;
+      gap: 0.35rem;
     }
 
     .layout-btn {
       flex: 1;
-      padding: 0.5rem;
-      background: #222;
+      padding: 0.4rem;
+      background: #1a1a1a;
       border: 1px solid #333;
       border-radius: 4px;
-      color: #fff;
+      color: #888;
       cursor: pointer;
-      font-size: 0.875rem;
+      font-size: 0.75rem;
       transition: all 0.15s;
     }
 
     .layout-btn:hover {
-      background: #333;
+      background: #252525;
+      color: #fff;
     }
 
     .layout-btn.active {
       background: #2563eb;
       border-color: #3b82f6;
+      color: #fff;
     }
 
     .clear-btn {
       width: 100%;
-      margin-top: 0.5rem;
-      padding: 0.5rem;
+      margin-top: 0.35rem;
+      padding: 0.35rem;
       background: transparent;
       border: 1px solid #333;
       border-radius: 4px;
-      color: #666;
+      color: #555;
       cursor: pointer;
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       transition: all 0.15s;
     }
 
@@ -118,12 +120,15 @@ export class FeedboardApp extends LitElement {
     }
 
     .streams-header {
-      padding: 1rem;
-      font-size: 0.75rem;
+      padding: 0.75rem 1rem;
+      font-size: 0.7rem;
       font-weight: 600;
       text-transform: uppercase;
       color: #666;
       letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
 
     .streams-list {
@@ -301,27 +306,41 @@ export class FeedboardApp extends LitElement {
     }
 
     .refresh-btn {
-      padding: 0.5rem 1rem;
-      background: #222;
-      border: 1px solid #333;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      background: transparent;
+      border: none;
       border-radius: 4px;
-      color: #fff;
+      color: #555;
       cursor: pointer;
-      font-size: 0.875rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+
+    .refresh-btn svg {
+      width: 14px;
+      height: 14px;
     }
 
     .refresh-btn:hover {
       background: #333;
+      color: #fff;
     }
 
     .section-header {
-      padding: 1rem;
-      font-size: 0.75rem;
+      padding: 0.75rem 1rem;
+      font-size: 0.7rem;
       font-weight: 600;
       text-transform: uppercase;
       color: #666;
       letter-spacing: 0.05em;
       border-top: 1px solid #222;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
 
     .sources-list {
@@ -369,19 +388,19 @@ export class FeedboardApp extends LitElement {
       padding: 0 0.5rem 0.5rem;
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
+      gap: 0.35rem;
     }
 
     .tz-select,
     .format-select,
     .label-input {
       width: 100%;
-      padding: 0.5rem;
-      background: #222;
+      padding: 0.4rem 0.5rem;
+      background: #1a1a1a;
       border: 1px solid #333;
       border-radius: 4px;
       color: #fff;
-      font-size: 0.8rem;
+      font-size: 0.75rem;
       box-sizing: border-box;
     }
 
@@ -409,12 +428,12 @@ export class FeedboardApp extends LitElement {
 
     .add-clock-btn {
       width: 100%;
-      padding: 0.5rem;
+      padding: 0.4rem;
       background: #1e3a5f;
       border: 1px solid #2563eb;
       border-radius: 4px;
       color: #fff;
-      font-size: 0.8rem;
+      font-size: 0.75rem;
       cursor: pointer;
       transition: all 0.15s;
       box-sizing: border-box;
@@ -422,6 +441,69 @@ export class FeedboardApp extends LitElement {
 
     .add-clock-btn:hover {
       background: #2563eb;
+    }
+
+    /* Keyboard shortcuts */
+    .shortcuts {
+      padding: 0.5rem 0.75rem;
+      border-top: 1px solid #222;
+      margin-top: auto;
+    }
+
+    .shortcuts-toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: none;
+      border: none;
+      color: #555;
+      font-size: 0.65rem;
+      cursor: pointer;
+      padding: 0;
+      width: 100%;
+    }
+
+    .shortcuts-toggle:hover {
+      color: #888;
+    }
+
+    .shortcuts-toggle::before {
+      content: '?';
+      width: 18px;
+      height: 18px;
+      background: #222;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      color: #666;
+    }
+
+    .shortcuts-list {
+      display: none;
+      padding-top: 0.5rem;
+    }
+
+    .shortcuts.open .shortcuts-list {
+      display: block;
+    }
+
+    .shortcut-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.65rem;
+      color: #555;
+      padding: 0.15rem 0;
+    }
+
+    .shortcut-key {
+      color: #888;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 0.6rem;
+      background: #222;
+      padding: 0.1rem 0.3rem;
+      border-radius: 3px;
     }
 
     /* Floating open button */
@@ -646,6 +728,7 @@ export class FeedboardApp extends LitElement {
   @state() private showInfo = false
   @state() private showLabels = true
   @state() private showVu = true
+  @state() private showShortcuts = false
 
   private client: MediaMTXClient | null = null
   private pollInterval: number | null = null
@@ -828,8 +911,19 @@ export class FeedboardApp extends LitElement {
     // Skip all other shortcuts when typing in inputs
     if (isInput) return
 
-    // S or Space to show UI
-    if (e.key === 's' || e.key === ' ') {
+    // S to toggle UI
+    if (e.key === 's') {
+      if (this.uiVisible) {
+        this.hideUI()
+      } else {
+        this.showUI()
+      }
+      e.preventDefault()
+      return
+    }
+
+    // Space to show UI (doesn't close)
+    if (e.key === ' ') {
       if (!this.uiVisible) {
         this.showUI()
       }
@@ -1286,9 +1380,9 @@ export class FeedboardApp extends LitElement {
         </div>
 
         <div class="streams-header">
-          Streams (${this.streams.length})
-          <button class="refresh-btn" @click=${() => this.fetchStreams()}>
-            ${this.loading ? '...' : 'Refresh'}
+          <span>Streams (${this.streams.length})</span>
+          <button class="refresh-btn" @click=${() => this.fetchStreams()} title="Refresh streams">
+            ${icons.refresh}
           </button>
         </div>
 
@@ -1357,6 +1451,24 @@ export class FeedboardApp extends LitElement {
               }}
               title="Open in new window"
             >${icons.plusSquare}</button>
+          </div>
+        </div>
+
+        <div class="shortcuts ${this.showShortcuts ? 'open' : ''}">
+          <button class="shortcuts-toggle" @click=${() => this.showShortcuts = !this.showShortcuts}>
+            Keyboard shortcuts
+          </button>
+          <div class="shortcuts-list">
+            <div class="shortcut-row"><span>Toggle sidebar</span><span class="shortcut-key">S</span></div>
+            <div class="shortcut-row"><span>Select cell</span><span class="shortcut-key">1-9</span></div>
+            <div class="shortcut-row"><span>Clear cell</span><span class="shortcut-key">Del</span></div>
+            <div class="shortcut-row"><span>Fullscreen cell</span><span class="shortcut-key">Enter</span></div>
+            <div class="shortcut-row"><span>Fullscreen app</span><span class="shortcut-key">F</span></div>
+            <div class="shortcut-row"><span>Toggle labels</span><span class="shortcut-key">L</span></div>
+            <div class="shortcut-row"><span>Toggle VU</span><span class="shortcut-key">U</span></div>
+            <div class="shortcut-row"><span>Toggle info</span><span class="shortcut-key">I</span></div>
+            <div class="shortcut-row"><span>Cycle grid</span><span class="shortcut-key">G</span></div>
+            <div class="shortcut-row"><span>Close</span><span class="shortcut-key">Esc</span></div>
           </div>
         </div>
 
