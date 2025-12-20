@@ -23,5 +23,16 @@ export { WhepClient } from './lib/whep-client'
 export { WhipClient, getDevices, captureCamera, captureScreen } from './lib/whip-client'
 export { HlsPlayer } from './lib/hls-player'
 
+// Export config functions
+export {
+  getConfig,
+  getApiUrl,
+  getWebrtcUrl,
+  getHlsUrl,
+  buildWhepUrl,
+  buildWhipUrl,
+  buildHlsUrl,
+} from './lib/config'
+
 // Types
 export type { MediaMTXPath, MediaMTXPathList } from './types/mediamtx'

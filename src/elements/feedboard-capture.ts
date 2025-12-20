@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js'
 import { WhipClient, getDevices, captureCamera, captureScreen } from '@/lib/whip-client'
 import { PPMMeter, dbfsToPercent, type PPMMeterData } from '@/lib/ppm-meter'
 import { icons } from '@/lib/icons'
+import { buildWhipUrl } from '@/lib/config'
 
 type CaptureType = 'camera' | 'screen' | 'tab'
 type Status = 'idle' | 'previewing' | 'connecting' | 'live' | 'error'
@@ -398,9 +399,14 @@ export class FeedboardCapture extends LitElement {
     }
   }
 
-  private getServerUrl(): string {
-    if (this.server) return this.server
-    return window.location.origin.replace(/:\d+$/, ':8889')
+  private getWhipUrl(path: string): string {
+    const cleanPath = path.startsWith('/') ? path.slice(1) : path
+    // Attribute override takes precedence
+    if (this.server) {
+      return `${this.server}/${cleanPath}/whip`
+    }
+    // Use centralized config
+    return buildWhipUrl(path)
   }
 
   private async startCamera() {
@@ -541,8 +547,7 @@ export class FeedboardCapture extends LitElement {
     this.status = 'connecting'
     this.errorMessage = ''
 
-    const path = this.publishPath.startsWith('/') ? this.publishPath.slice(1) : this.publishPath
-    const url = `${this.getServerUrl()}/${path}/whip`
+    const url = this.getWhipUrl(this.publishPath)
 
     try {
       this.whipClient = new WhipClient(url)

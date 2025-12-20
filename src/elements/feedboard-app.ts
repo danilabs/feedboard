@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js'
 import { MediaMTXClient } from '@/lib/mediamtx-api'
 import type { MediaMTXPath } from '@/types/mediamtx'
 import { icons } from '@/lib/icons'
+import { getApiUrl, getWebrtcUrl } from '@/lib/config'
 
 type GridLayout = '1x1' | '2x2' | '3x3' | '4x4'
 
@@ -1050,21 +1051,21 @@ export class FeedboardApp extends LitElement {
   }
 
   private getServerUrl(): string {
+    // Attribute override takes precedence
     if (this.server) return this.server
-    // Default to same origin - works behind proxy/ngrok
-    // For direct MediaMTX access, set server="http://localhost:8889"
-    return window.location.origin
+    // Use centralized config
+    return getWebrtcUrl()
   }
 
-  private getApiUrl(): string {
+  private getApiBaseUrl(): string {
+    // Attribute override takes precedence
     if (this.api) return this.api
-    // Default to same origin - API proxied at /v3/*
-    // For direct MediaMTX access, set api="http://localhost:9997"
-    return window.location.origin
+    // Use centralized config
+    return getApiUrl()
   }
 
   private initClient() {
-    this.client = new MediaMTXClient(this.getApiUrl())
+    this.client = new MediaMTXClient(this.getApiBaseUrl())
   }
 
   private initCells() {

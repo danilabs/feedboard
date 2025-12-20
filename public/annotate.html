@@ -213,24 +213,17 @@
   </div>
 
   <script type="module">
-    import { WhipClient, MediaMTXClient } from './feedboard.js'
+    import { WhipClient, MediaMTXClient, getApiUrl, getWebrtcUrl, buildWhipUrl } from './feedboard.js'
 
     // Parse URL params
     const params = new URLSearchParams(window.location.search)
     let src = params.get('src') || ''
     let publishTo = params.get('publish') || ''
 
-    // Server defaults to same origin (works behind Caddy proxy)
-    // For direct access, use ?server=http://localhost:8889
-    const server = params.get('server') || window.location.origin
-    console.log('[annotate] server =', server, 'origin =', window.location.origin)
-
-    // API URL - defaults to /v3 path (Caddy proxy) or explicit override
-    const apiUrl = params.get('api') || (
-      server === window.location.origin
-        ? window.location.origin  // Use /v3/* through proxy
-        : server.replace(':8889', ':9997')  // Direct MediaMTX access
-    )
+    // Use centralized config, with URL param overrides
+    const server = params.get('server') || getWebrtcUrl()
+    const apiUrl = params.get('api') || getApiUrl()
+    console.log('[annotate] server =', server, 'apiUrl =', apiUrl)
 
     // DOM elements
     const player = document.getElementById('source')
@@ -664,8 +657,11 @@
         const fps = parseInt(document.getElementById('quality').value)
         const stream = outputCanvas.captureStream(fps)
 
-        // WHIP to MediaMTX
-        whipClient = new WhipClient(`${server}${publishTo}/whip`)
+        // WHIP to MediaMTX - use param override or config
+        const whipUrl = params.get('server')
+          ? `${server}${publishTo}/whip`
+          : buildWhipUrl(publishTo)
+        whipClient = new WhipClient(whipUrl)
         await whipClient.publish(stream)
 
         isPublishing = true

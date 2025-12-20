@@ -4,6 +4,7 @@ import { WhepClient } from '@/lib/whep-client'
 import { HlsPlayer } from '@/lib/hls-player'
 import { PPMMeter, dbfsToPercent, type PPMMeterData } from '@/lib/ppm-meter'
 import { icons } from '@/lib/icons'
+import { getWebrtcUrl, getHlsUrl, buildWhepUrl, buildHlsUrl } from '@/lib/config'
 
 type Protocol = 'auto' | 'whep' | 'hls'
 type FitMode = 'contain' | 'cover' | 'fill'
@@ -619,13 +620,13 @@ export class FeedboardPlayer extends LitElement {
     }
   }
 
-  private getServer(): string {
-    // Look for server from parent elements or use attribute
+  private getServerOverride(): string | null {
+    // Check for explicit server attribute
     if (this.server) {
       return this.server
     }
 
-    // Walk up the DOM to find a server attribute
+    // Walk up the DOM to find a server attribute on parent
     let parent = this.parentElement
     while (parent) {
       const serverAttr = parent.getAttribute('server')
@@ -635,14 +636,13 @@ export class FeedboardPlayer extends LitElement {
       parent = parent.parentElement
     }
 
-    // Default to same origin - works behind proxy/ngrok
-    return window.location.origin
+    return null
   }
 
   private resolveUrl(): { whepUrl?: string; hlsUrl?: string } {
     const src = this.src
 
-    // Full URL provided
+    // Full URL provided - use as-is
     if (src.startsWith('http://') || src.startsWith('https://')) {
       if (src.includes('.m3u8') || src.includes('/hls/')) {
         return { hlsUrl: src }
@@ -650,13 +650,22 @@ export class FeedboardPlayer extends LitElement {
       return { whepUrl: src }
     }
 
-    // Path-based - construct full URLs
-    const server = this.getServer()
+    // Check for server override from attribute
+    const serverOverride = this.getServerOverride()
     const cleanPath = src.startsWith('/') ? src.slice(1) : src
 
+    if (serverOverride) {
+      // Use override for both WHEP and HLS
+      return {
+        whepUrl: `${serverOverride}/${cleanPath}/whep`,
+        hlsUrl: `${serverOverride}/${cleanPath}/index.m3u8`,
+      }
+    }
+
+    // Use centralized config
     return {
-      whepUrl: `${server}/${cleanPath}/whep`,
-      hlsUrl: `${server}/${cleanPath}/index.m3u8`,
+      whepUrl: buildWhepUrl(src),
+      hlsUrl: buildHlsUrl(src),
     }
   }
 
