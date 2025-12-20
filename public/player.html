@@ -51,6 +51,11 @@
       player.setAttribute('protocol', params.get('protocol'))
     }
 
+    // Connect after attributes are set
+    if (params.get('src')) {
+      player.connect()
+    }
+
     let showInfo = false
 
     // Keyboard shortcuts

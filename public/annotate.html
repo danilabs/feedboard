@@ -172,7 +172,7 @@
   </div>
 
   <div class="shortcuts">
-    <kbd>1-5</kbd> colors <kbd>+/-</kbd> size <kbd>U</kbd> undo <kbd>C</kbd> clear <kbd>P</kbd> pen <kbd>A</kbd> arrow <kbd>R</kbd> rect <kbd>O</kbd> circle <kbd>L</kbd> line <kbd>E</kbd> eraser <kbd>M</kbd> mute <kbd>F</kbd> fullscreen
+    <kbd>1-5</kbd> colors <kbd>+/-</kbd> size <kbd>U</kbd> undo <kbd>C</kbd> clear <kbd>P</kbd> pen <kbd>A</kbd> arrow <kbd>R</kbd> rect <kbd>O</kbd> circle <kbd>L</kbd> line <kbd>E</kbd> eraser <kbd>F</kbd> fullscreen
   </div>
 
   <div class="toolbar">
@@ -202,7 +202,6 @@
 
     <button id="undo" title="Undo (U)">Undo</button>
     <button id="clear" title="Clear (C)">Clear</button>
-    <button id="mute" title="Mute (M)">Mute</button>
     <button id="fullscreen" title="Fullscreen (F)">Full</button>
 
     <select id="quality" title="Capture quality">
@@ -214,19 +213,7 @@
   </div>
 
   <script type="module">
-    // Import from the same source as the main script
-    let WhipClient, MediaMTXClient
-    try {
-      // Production build
-      const mod = await import('./feedboard.js')
-      WhipClient = mod.WhipClient
-      MediaMTXClient = mod.MediaMTXClient
-    } catch {
-      // Dev mode (Vite serves this)
-      const mod = await import('/src/index.ts')
-      WhipClient = mod.WhipClient
-      MediaMTXClient = mod.MediaMTXClient
-    }
+    import { WhipClient, MediaMTXClient } from './feedboard.js'
 
     // Parse URL params
     const params = new URLSearchParams(window.location.search)
@@ -270,7 +257,6 @@
     let isPublishing = false
     let animationId = null
     let initialLoadDone = false
-    let isMuted = true
 
     const colors = ['#ff0000', '#ffff00', '#00ff00', '#00bfff', '#ffffff']
 
@@ -536,15 +522,6 @@
       redraw()
     }
 
-    // Mute toggle
-    document.getElementById('mute').onclick = () => {
-      isMuted = !isMuted
-      player.setAttribute('muted', isMuted ? '' : null)
-      if (!isMuted) player.removeAttribute('muted')
-      document.getElementById('mute').textContent = isMuted ? 'Mute' : 'Unmute'
-      document.getElementById('mute').classList.toggle('active', !isMuted)
-    }
-
     // Fullscreen
     document.getElementById('fullscreen').onclick = () => {
       if (document.fullscreenElement) {
@@ -567,9 +544,6 @@
         case 'o': setTool('circle'); break
         case 'l': setTool('line'); break
         case 'e': setTool('eraser'); break
-        case 'm':
-          document.getElementById('mute').click()
-          break
         case 'f':
           document.getElementById('fullscreen').click()
           break
@@ -686,16 +660,9 @@
         // Start compositing loop
         renderComposite()
 
-        // Capture the output canvas at selected fps
+        // Capture the output canvas at selected fps (video only, no audio)
         const fps = parseInt(document.getElementById('quality').value)
         const stream = outputCanvas.captureStream(fps)
-
-        // Add audio from original video if available
-        const video = player.shadowRoot?.querySelector('video')
-        if (video?.srcObject) {
-          const audioTracks = video.srcObject.getAudioTracks()
-          audioTracks.forEach(track => stream.addTrack(track.clone()))
-        }
 
         // WHIP to MediaMTX
         whipClient = new WhipClient(`${server}${publishTo}/whip`)

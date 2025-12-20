@@ -8,8 +8,22 @@ export default defineConfig({
     },
   },
   server: {
-    allowedHosts: true
+    allowedHosts: true,
   },
+  plugins: [
+    {
+      name: 'serve-feedboard-js',
+      configureServer(server) {
+        // In dev, serve requests for feedboard.js from source
+        server.middlewares.use((req, res, next) => {
+          if (req.url === '/feedboard.js' || req.url?.match(/\/feedboard\.js(\?|$)/)) {
+            req.url = '/src/index.ts'
+          }
+          next()
+        })
+      },
+    },
+  ],
   build: {
     lib: {
       entry: fileURLToPath(new URL('./src/index.ts', import.meta.url)),
