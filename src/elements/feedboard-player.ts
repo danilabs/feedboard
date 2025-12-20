@@ -622,7 +622,6 @@ export class FeedboardPlayer extends LitElement {
   private getServer(): string {
     // Look for server from parent elements or use attribute
     if (this.server) {
-      console.log('[feedboard-player] Using server attribute:', this.server)
       return this.server
     }
 
@@ -631,14 +630,12 @@ export class FeedboardPlayer extends LitElement {
     while (parent) {
       const serverAttr = parent.getAttribute('server')
       if (serverAttr) {
-        console.log('[feedboard-player] Using parent server:', serverAttr)
         return serverAttr
       }
       parent = parent.parentElement
     }
 
     // Default to same origin - works behind proxy/ngrok
-    console.log('[feedboard-player] Using origin:', window.location.origin)
     return window.location.origin
   }
 
