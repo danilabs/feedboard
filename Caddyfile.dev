@@ -1,0 +1,36 @@
+# Feedboard development Caddyfile (Docker)
+# Proxies Vite dev server + MediaMTX through a single port
+
+{
+	local_certs
+}
+
+:443 {
+	# MediaMTX API
+	handle /v3/* {
+		reverse_proxy mediamtx:9997
+	}
+
+	# MediaMTX WebRTC - WHIP endpoints (publish)
+	@whip path */whip
+	handle @whip {
+		reverse_proxy mediamtx:8889
+	}
+
+	# MediaMTX WebRTC - WHEP endpoints (playback)
+	@whep path */whep
+	handle @whep {
+		reverse_proxy mediamtx:8889
+	}
+
+	# MediaMTX HLS
+	@hls path_regexp hls ^/.+\.(m3u8|ts)$
+	handle @hls {
+		reverse_proxy mediamtx:8888
+	}
+
+	# Vite dev server (with HMR websocket)
+	handle {
+		reverse_proxy vite:5173
+	}
+}

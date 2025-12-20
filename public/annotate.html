@@ -3,7 +3,7 @@
 <head>
   <title>Annotate</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <script type="module" src="./src/index.ts"></script>
+  <script type="module" src="./feedboard.js"></script>
   <style>
     * { margin: 0; box-sizing: border-box; }
     html, body {
@@ -214,7 +214,19 @@
   </div>
 
   <script type="module">
-    import { WhipClient, MediaMTXClient } from './src/index.ts'
+    // Import from the same source as the main script
+    let WhipClient, MediaMTXClient
+    try {
+      // Production build
+      const mod = await import('./feedboard.js')
+      WhipClient = mod.WhipClient
+      MediaMTXClient = mod.MediaMTXClient
+    } catch {
+      // Dev mode (Vite serves this)
+      const mod = await import('/src/index.ts')
+      WhipClient = mod.WhipClient
+      MediaMTXClient = mod.MediaMTXClient
+    }
 
     // Parse URL params
     const params = new URLSearchParams(window.location.search)

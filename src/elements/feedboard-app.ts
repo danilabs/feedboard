@@ -1209,6 +1209,12 @@ export class FeedboardApp extends LitElement {
     window.open(url, `feedboard-${path}`, 'width=800,height=500,resizable=yes')
   }
 
+  private openAnnotateWindow() {
+    const server = this.getServerUrl()
+    const url = `/annotate.html?server=${encodeURIComponent(server)}`
+    window.open(url, 'feedboard-annotate', 'width=900,height=700,resizable=yes')
+  }
+
   private renderCell(cell: CellConfig, index: number) {
     const isSelected = this.selectedCell === index
     const isCellFullscreen = this.fullscreenCell === index
@@ -1456,6 +1462,10 @@ export class FeedboardApp extends LitElement {
               }}
               title="Open in new window"
             >${icons.plusSquare}</button>
+          </div>
+          <div class="stream-item" @click=${() => this.openAnnotateWindow()}>
+            <div class="stream-status"></div>
+            <span class="stream-name">Annotate</span>
           </div>
         </div>
 

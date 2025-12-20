@@ -1,23 +1,31 @@
 # Feedboard
 
-A browser-based video production toolkit that leverages MediaMTX as the media backbone. Create multiview layouts, capture local sources, and stream to MediaMTX - all from the browser.
+A browser-based video production toolkit for [MediaMTX](https://github.com/bluenviron/mediamtx). Create multiview layouts, capture local sources, and stream via WebRTC - all from the browser.
 
 **Design Philosophy:** Match MediaMTX's simplicity. Single JS file + HTML. Zero friction.
 
 ## Quick Start
 
 ```bash
-# Install dependencies
+# Install and build
 npm install
-
-# Start dev server
-npm run dev
-
-# Build for production
 npm run build
+
+# Serve the dist folder
+npx serve dist
 ```
 
-Open `http://localhost:5173` to use the full app, or include components in your own HTML.
+Or use Docker:
+
+```bash
+# Production
+docker compose up
+
+# Development (with hot reload)
+docker compose -f docker-compose.dev.yml up
+```
+
+Open `http://localhost:8080` to use the app.
 
 ## Usage
 
@@ -51,7 +59,7 @@ Open `http://localhost:5173` to use the full app, or include components in your 
   <feedboard-slate text="STANDBY"></feedboard-slate>
 </feedboard-grid>
 
-<!-- Local capture (camera/screen/tab) with optional WHIP publish -->
+<!-- Local capture with WHIP publish -->
 <feedboard-capture type="camera" publish-to="/webcam"></feedboard-capture>
 
 <!-- Clock -->
@@ -67,8 +75,8 @@ Open `http://localhost:5173` to use the full app, or include components in your 
 |-----------|-------------|
 | `<feedboard-app>` | Full application with sidebar, grid, and controls |
 | `<feedboard-player>` | Video player supporting WHEP and HLS |
-| `<feedboard-grid>` | NxN grid layout (1x1, 2x2, 3x3, 4x4) |
-| `<feedboard-capture>` | Local capture source (camera/screen/tab) with optional WHIP publishing |
+| `<feedboard-grid>` | NxN grid layout (1x1 to 4x4) |
+| `<feedboard-capture>` | Local capture with optional WHIP publishing |
 | `<feedboard-clock>` | Clock/timecode display |
 | `<feedboard-slate>` | Text/color slate |
 
@@ -97,7 +105,7 @@ Open `http://localhost:5173` to use the full app, or include components in your 
 | `src` | string | required | Stream path or full URL |
 | `server` | string | - | MediaMTX server URL |
 | `protocol` | `auto\|whep\|hls` | `auto` | Force protocol |
-| `label` | string | - | Custom label (defaults to path) |
+| `label` | string | - | Custom label |
 | `show-info` | boolean | `false` | Show info overlay |
 | `show-label` | boolean | `false` | Show centered label |
 | `show-vu` | boolean | `false` | Show VU meter (WHEP only) |
@@ -107,7 +115,7 @@ Open `http://localhost:5173` to use the full app, or include components in your 
 | Attribute | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `type` | `camera\|screen\|tab` | `camera` | Capture source |
-| `publish-to` | string | - | WHIP path (optional) |
+| `publish-to` | string | - | WHIP publish path |
 | `server` | string | - | MediaMTX server URL |
 | `device-id` | string | - | Specific camera device |
 | `resolution` | `720p\|1080p\|4k` | `1080p` | Video resolution |
@@ -122,6 +130,7 @@ Open `http://localhost:5173` to use the full app, or include components in your 
 | `format` | string | `HH:mm:ss` | Time format |
 | `timezone` | string | local | IANA timezone |
 | `label` | string | - | Display label |
+| `framerate` | number | - | For timecode (`:ff`) |
 
 ### `<feedboard-slate>`
 
@@ -131,9 +140,54 @@ Open `http://localhost:5173` to use the full app, or include components in your 
 | `background` | string | `#000` | Background color |
 | `color` | string | `#fff` | Text color |
 
-## MediaMTX Setup
+## Standalone Pages
 
-Feedboard works with [MediaMTX](https://github.com/bluenviron/mediamtx). Default ports:
+The dist includes standalone pages that accept URL parameters:
+
+**Player** (`/player.html`)
+```
+/player.html?src=/stream&server=http://localhost:8889
+```
+
+**Capture** (`/capture.html`)
+```
+/capture.html?path=/webcam&server=http://localhost:8889
+```
+
+## Docker Deployment
+
+The included `docker-compose.yml` runs Feedboard with MediaMTX behind Caddy:
+
+```bash
+# With automatic HTTPS (self-signed)
+docker compose up -d
+
+# With Let's Encrypt (provide your domain)
+DOMAIN=feedboard.example.com docker compose up -d
+```
+
+This provides:
+- **Port 80/443**: Feedboard UI with HTTPS (via Caddy)
+- **Port 8554**: RTSP
+- **Port 1935**: RTMP
+
+Caddy handles proxying API and WebRTC requests to MediaMTX internally.
+
+### Testing with FFmpeg
+
+```bash
+# Push a test stream
+ffmpeg -f lavfi -i testsrc=size=1280x720:rate=30 \
+       -f lavfi -i sine=frequency=440:sample_rate=48000 \
+       -c:v libx264 -preset ultrafast -tune zerolatency \
+       -c:a aac -f flv rtmp://localhost:1935/test
+```
+
+Then open `https://localhost` and view `/test` in the grid.
+
+## MediaMTX Configuration
+
+Feedboard works with MediaMTX defaults. Key ports:
 
 | Port | Protocol |
 |------|----------|
@@ -142,10 +196,18 @@ Feedboard works with [MediaMTX](https://github.com/bluenviron/mediamtx). Default
 | 9997 | API |
 | 8554 | RTSP |
 
-```yaml
-# mediamtx.yml - enable WebRTC
-webrtc: yes
-webrtcAddress: :8889
+## Development
+
+```bash
+npm install
+npm run dev
+```
+
+The dev server runs on `http://localhost:5173`. Use the included `Caddyfile` to proxy both Vite and MediaMTX through a single port:
+
+```bash
+caddy run
+# Then open http://localhost:8123
 ```
 
 ## Project Structure
@@ -153,40 +215,30 @@ webrtcAddress: :8889
 ```
 feedboard/
 ├── src/
-│   ├── index.ts              # Exports all elements
-│   ├── elements/
+│   ├── index.ts              # Main exports
+│   ├── elements/             # Web components
 │   │   ├── feedboard-app.ts
 │   │   ├── feedboard-player.ts
 │   │   ├── feedboard-grid.ts
 │   │   ├── feedboard-capture.ts
 │   │   ├── feedboard-clock.ts
 │   │   └── feedboard-slate.ts
-│   ├── lib/
-│   │   ├── mediamtx-api.ts   # MediaMTX REST client
-│   │   ├── whep-client.ts    # WHEP player
-│   │   ├── whip-client.ts    # WHIP publisher
-│   │   └── hls-player.ts     # HLS.js wrapper
+│   ├── lib/                  # Utilities
+│   │   ├── mediamtx-api.ts
+│   │   ├── whep-client.ts
+│   │   ├── whip-client.ts
+│   │   └── hls-player.ts
 │   └── types/
-│       └── mediamtx.ts
-├── public/
+├── public/                   # Static assets (copied to dist)
 │   ├── index.html
+│   ├── player.html
 │   ├── capture.html
-│   └── player.html
+│   └── examples/
 ├── dist/                     # Built output
-└── PLAN.md                   # Detailed roadmap
+├── docker-compose.yml
+├── Dockerfile
+└── Caddyfile
 ```
-
-## Feedboard Agent (Optional)
-
-A Go binary sidecar for advanced features:
-
-- **Auth** - MediaMTX authentication hook
-- **Thumbnails** - Stream thumbnail capture via GStreamer
-- **Captions** - Real-time speech-to-text via FFmpeg/Whisper
-- **Layouts** - Server-side layout persistence
-- **Sync** - Multi-user real-time sync
-
-See `PLAN.md` for details.
 
 ## License
 

@@ -1,0 +1,38 @@
+# Feedboard production Caddyfile
+#
+# Default: https on port 443 with self-signed cert
+# With domain: DOMAIN=example.com TLS_MODE= docker compose up
+
+{$DOMAIN} {
+	tls {$TLS_MODE}
+
+	# MediaMTX API
+	handle /v3/* {
+		reverse_proxy mediamtx:9997
+	}
+
+	# MediaMTX WebRTC - WHIP endpoints (publish)
+	@whip path */whip
+	handle @whip {
+		reverse_proxy mediamtx:8889
+	}
+
+	# MediaMTX WebRTC - WHEP endpoints (playback)
+	@whep path */whep
+	handle @whep {
+		reverse_proxy mediamtx:8889
+	}
+
+	# MediaMTX HLS
+	@hls path_regexp hls ^/.+\.(m3u8|ts)$
+	handle @hls {
+		reverse_proxy mediamtx:8888
+	}
+
+	# Static files
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
