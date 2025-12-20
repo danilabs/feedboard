@@ -1,0 +1,31 @@
+# Feedboard development reverse proxy
+# Proxies Vite + MediaMTX through a single port
+#
+# Usage: caddy run
+# Local: http://localhost:8123
+# Remote: ngrok http 8123
+
+http://:8123 {
+
+	# MediaMTX API
+	handle /v3/* {
+		reverse_proxy localhost:9997
+	}
+
+	# MediaMTX WebRTC - WHIP endpoints (publish)
+	@whip path */whip
+	handle @whip {
+		reverse_proxy localhost:8889
+	}
+
+	# MediaMTX WebRTC - WHEP endpoints (playback)
+	@whep path */whep
+	handle @whep {
+		reverse_proxy localhost:8889
+	}
+
+	# Vite dev server (default)
+	handle {
+		reverse_proxy localhost:5173
+	}
+}

@@ -714,6 +714,7 @@ export class FeedboardApp extends LitElement {
   `
 
   @property({ type: String }) server = ''
+  @property({ type: String }) api = ''
   @property({ type: String, attribute: 'storage-key' }) storageKey = 'feedboard-layout'
 
   @state() private streams: MediaMTXPath[] = []
@@ -1050,12 +1051,16 @@ export class FeedboardApp extends LitElement {
 
   private getServerUrl(): string {
     if (this.server) return this.server
-    // Default: assume MediaMTX on same host, port 8889
-    return window.location.origin.replace(/:\d+$/, ':8889')
+    // Default to same origin - works behind proxy/ngrok
+    // For direct MediaMTX access, set server="http://localhost:8889"
+    return window.location.origin
   }
 
   private getApiUrl(): string {
-    return this.getServerUrl().replace(':8889', ':9997')
+    if (this.api) return this.api
+    // Default to same origin - API proxied at /v3/*
+    // For direct MediaMTX access, set api="http://localhost:9997"
+    return window.location.origin
   }
 
   private initClient() {

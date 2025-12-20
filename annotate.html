@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Annotate</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <script type="module" src="./src/index.ts"></script>
+  <style>
+    * { margin: 0; box-sizing: border-box; }
+    html, body {
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      height: 100dvh; /* Dynamic viewport height for mobile */
+      overflow: hidden;
+    }
+
+    .video-area {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+    }
+
+    feedboard-player {
+      width: 100%;
+      height: 100%;
+    }
+
+    .draw-canvas {
+      position: absolute;
+      touch-action: none;
+      cursor: crosshair;
+      z-index: 100;
+      pointer-events: auto;
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      background: #111;
+      flex-shrink: 0;
+      max-height: 40%;
+      overflow-y: auto;
+    }
+
+    .toolbar button, .toolbar input {
+      padding: 0.5rem 1rem;
+      background: #222;
+      border: 1px solid #444;
+      color: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+
+    .toolbar button:hover {
+      background: #333;
+    }
+
+    .toolbar button.active {
+      background: #d00;
+      border-color: #f00;
+    }
+
+    .toolbar input[type="range"] {
+      width: 60px;
+      cursor: pointer;
+    }
+
+    .toolbar select {
+      padding: 0.5rem;
+      background: #222;
+      border: 1px solid #444;
+      color: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+      min-width: 120px;
+    }
+
+    .color-palette {
+      display: flex;
+      gap: 2px;
+    }
+
+    .color-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      border: 2px solid #444;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .color-btn.active {
+      border-color: #fff;
+    }
+
+    .tool-group {
+      display: flex;
+      gap: 2px;
+      background: #1a1a1a;
+      padding: 2px;
+      border-radius: 4px;
+    }
+
+    .tool-group button {
+      padding: 0.4rem 0.6rem;
+      font-size: 0.875rem;
+    }
+
+    .tool-group button.active {
+      background: #444;
+      border-color: #666;
+    }
+
+    .status {
+      padding: 0.5rem 0.75rem;
+      background: #222;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #888;
+      font-family: system-ui, sans-serif;
+      font-size: 0.75rem;
+    }
+
+    .status.live {
+      color: #f00;
+      border-color: #f00;
+    }
+
+    .shortcuts {
+      display: none; /* Hidden by default, show on hover/focus or desktop */
+      position: absolute;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.9);
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      color: #666;
+      font-family: system-ui, sans-serif;
+      font-size: 0.75rem;
+      white-space: nowrap;
+      z-index: 50;
+    }
+
+    /* Only show on desktop with keyboard */
+    @media (hover: hover) and (min-width: 1024px) {
+      .shortcuts {
+        display: block;
+      }
+    }
+
+    .shortcuts kbd {
+      background: #333;
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin: 0 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="video-area">
+    <feedboard-player
+      id="source"
+      muted
+    ></feedboard-player>
+    <canvas class="draw-canvas" id="drawCanvas"></canvas>
+  </div>
+
+  <div class="shortcuts">
+    <kbd>1-5</kbd> colors <kbd>+/-</kbd> size <kbd>U</kbd> undo <kbd>C</kbd> clear <kbd>P</kbd> pen <kbd>A</kbd> arrow <kbd>R</kbd> rect <kbd>O</kbd> circle <kbd>L</kbd> line <kbd>E</kbd> eraser <kbd>M</kbd> mute <kbd>F</kbd> fullscreen
+  </div>
+
+  <div class="toolbar">
+    <select id="sourceSelect" title="Source stream">
+      <option value="">Select source...</option>
+    </select>
+
+    <div class="tool-group">
+      <button id="pen" class="active" title="Pen (P)">Pen</button>
+      <button id="arrow" title="Arrow (A)">Arrow</button>
+      <button id="rect" title="Rectangle (R)">Rect</button>
+      <button id="circle" title="Circle (O)">Circle</button>
+      <button id="line" title="Line (L)">Line</button>
+      <button id="eraser" title="Eraser (E)">Eraser</button>
+    </div>
+
+    <div class="color-palette">
+      <button class="color-btn active" data-color="#ff0000" style="background:#ff0000" title="Red (1)"></button>
+      <button class="color-btn" data-color="#ffff00" style="background:#ffff00" title="Yellow (2)"></button>
+      <button class="color-btn" data-color="#00ff00" style="background:#00ff00" title="Green (3)"></button>
+      <button class="color-btn" data-color="#00bfff" style="background:#00bfff" title="Blue (4)"></button>
+      <button class="color-btn" data-color="#ffffff" style="background:#ffffff" title="White (5)"></button>
+    </div>
+
+    <input type="range" id="size" min="2" max="20" value="4" title="Size (+/-)">
+    <input type="range" id="opacity" min="0.1" max="1" step="0.1" value="1" title="Opacity">
+
+    <button id="undo" title="Undo (U)">Undo</button>
+    <button id="clear" title="Clear (C)">Clear</button>
+    <button id="mute" title="Mute (M)">Mute</button>
+    <button id="fullscreen" title="Fullscreen (F)">Full</button>
+
+    <select id="quality" title="Capture quality">
+      <option value="30">30 fps</option>
+      <option value="60">60 fps</option>
+    </select>
+    <div class="status" id="status">Not publishing</div>
+    <button id="publish">Publish</button>
+  </div>
+
+  <script type="module">
+    import { WhipClient, MediaMTXClient } from './src/index.ts'
+
+    // Parse URL params
+    const params = new URLSearchParams(window.location.search)
+    let src = params.get('src') || ''
+    let publishTo = params.get('publish') || ''
+
+    // Server defaults to same origin (works behind Caddy proxy)
+    // For direct access, use ?server=http://localhost:8889
+    const server = params.get('server') || window.location.origin
+    console.log('[annotate] server =', server, 'origin =', window.location.origin)
+
+    // API URL - defaults to /v3 path (Caddy proxy) or explicit override
+    const apiUrl = params.get('api') || (
+      server === window.location.origin
+        ? window.location.origin  // Use /v3/* through proxy
+        : server.replace(':8889', ':9997')  // Direct MediaMTX access
+    )
+
+    // DOM elements
+    const player = document.getElementById('source')
+    const sourceSelect = document.getElementById('sourceSelect')
+    const drawCanvas = document.getElementById('drawCanvas')
+    const drawCtx = drawCanvas.getContext('2d')
+
+    // Configure player
+    player.setAttribute('server', server)
+
+    // Output canvas for compositing
+    const outputCanvas = document.createElement('canvas')
+    const outputCtx = outputCanvas.getContext('2d')
+
+    // State - define early so they're available everywhere
+    let isDrawing = false
+    let color = '#ff0000'
+    let lineWidth = 4
+    let opacity = 1
+    let tool = 'pen' // pen, arrow, rect, circle, line, eraser
+    let strokes = []
+    let currentStroke = null
+    let whipClient = null
+    let isPublishing = false
+    let animationId = null
+    let initialLoadDone = false
+    let isMuted = true
+
+    const colors = ['#ff0000', '#ffff00', '#00ff00', '#00bfff', '#ffffff']
+
+    // Draw an arrow from start to end
+    function drawArrow(ctx, start, end, headLen = 20) {
+      const dx = end.x - start.x
+      const dy = end.y - start.y
+      const angle = Math.atan2(dy, dx)
+      ctx.beginPath()
+      ctx.moveTo(start.x, start.y)
+      ctx.lineTo(end.x, end.y)
+      ctx.lineTo(end.x - headLen * Math.cos(angle - Math.PI / 6), end.y - headLen * Math.sin(angle - Math.PI / 6))
+      ctx.moveTo(end.x, end.y)
+      ctx.lineTo(end.x - headLen * Math.cos(angle + Math.PI / 6), end.y - headLen * Math.sin(angle + Math.PI / 6))
+      ctx.stroke()
+    }
+
+    // Redraw all strokes
+    function redraw() {
+      drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height)
+      strokes.forEach(stroke => {
+        drawCtx.globalAlpha = stroke.opacity || 1
+        drawCtx.strokeStyle = stroke.color
+        drawCtx.lineWidth = stroke.width
+        drawCtx.lineCap = 'round'
+        drawCtx.lineJoin = 'round'
+
+        if (stroke.tool === 'eraser') {
+          drawCtx.globalCompositeOperation = 'destination-out'
+        } else {
+          drawCtx.globalCompositeOperation = 'source-over'
+        }
+
+        const start = stroke.points[0]
+        const end = stroke.points[stroke.points.length - 1]
+
+        switch (stroke.tool) {
+          case 'arrow':
+            drawArrow(drawCtx, start, end)
+            break
+          case 'rect':
+            drawCtx.beginPath()
+            drawCtx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y)
+            break
+          case 'circle':
+            const rx = Math.abs(end.x - start.x) / 2
+            const ry = Math.abs(end.y - start.y) / 2
+            const cx = start.x + (end.x - start.x) / 2
+            const cy = start.y + (end.y - start.y) / 2
+            drawCtx.beginPath()
+            drawCtx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+            drawCtx.stroke()
+            break
+          case 'line':
+            drawCtx.beginPath()
+            drawCtx.moveTo(start.x, start.y)
+            drawCtx.lineTo(end.x, end.y)
+            drawCtx.stroke()
+            break
+          default: // pen or eraser
+            drawCtx.beginPath()
+            stroke.points.forEach((p, i) => {
+              if (i === 0) drawCtx.moveTo(p.x, p.y)
+              else drawCtx.lineTo(p.x, p.y)
+            })
+            drawCtx.stroke()
+        }
+      })
+      drawCtx.globalAlpha = 1
+      drawCtx.globalCompositeOperation = 'source-over'
+    }
+
+    // Resize canvases to match video display area
+    function resize() {
+      const video = player.shadowRoot?.querySelector('video')
+      if (!video) {
+        // Fallback to container size if no video yet
+        const rect = drawCanvas.getBoundingClientRect()
+        if (rect.width > 0 && rect.height > 0) {
+          drawCanvas.width = rect.width
+          drawCanvas.height = rect.height
+          outputCanvas.width = rect.width
+          outputCanvas.height = rect.height
+        }
+        return
+      }
+
+      // Get video's actual display dimensions (accounting for object-fit)
+      const videoRect = video.getBoundingClientRect()
+      const containerRect = document.querySelector('.video-area').getBoundingClientRect()
+
+      // Position canvas to match video
+      drawCanvas.style.left = (videoRect.left - containerRect.left) + 'px'
+      drawCanvas.style.top = (videoRect.top - containerRect.top) + 'px'
+      drawCanvas.style.width = videoRect.width + 'px'
+      drawCanvas.style.height = videoRect.height + 'px'
+      drawCanvas.style.right = 'auto'
+      drawCanvas.style.bottom = 'auto'
+
+      // Set canvas resolution to match video
+      drawCanvas.width = video.videoWidth || videoRect.width
+      drawCanvas.height = video.videoHeight || videoRect.height
+      outputCanvas.width = drawCanvas.width
+      outputCanvas.height = drawCanvas.height
+
+      redraw()
+    }
+
+    // Defer initial resize and keep checking until video is ready
+    function initResize() {
+      resize()
+      const video = player.shadowRoot?.querySelector('video')
+      if (!video || !video.videoWidth) {
+        requestAnimationFrame(initResize)
+      }
+    }
+    requestAnimationFrame(initResize)
+    window.addEventListener('resize', resize)
+
+    // Get pointer position (scaled to canvas coordinates)
+    function getPos(e) {
+      const rect = drawCanvas.getBoundingClientRect()
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY
+      // Scale from display coordinates to canvas coordinates
+      const scaleX = drawCanvas.width / rect.width
+      const scaleY = drawCanvas.height / rect.height
+      return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+      }
+    }
+
+    // Drawing handlers
+    drawCanvas.addEventListener('pointerdown', (e) => {
+      e.preventDefault()
+      drawCanvas.setPointerCapture(e.pointerId)
+      isDrawing = true
+      currentStroke = {
+        tool,
+        color: tool === 'eraser' ? '#000' : color,
+        width: lineWidth,
+        opacity,
+        points: [getPos(e)]
+      }
+
+      if (tool === 'pen' || tool === 'eraser') {
+        drawCtx.beginPath()
+        drawCtx.strokeStyle = currentStroke.color
+        drawCtx.lineWidth = lineWidth
+        drawCtx.lineCap = 'round'
+        drawCtx.lineJoin = 'round'
+        drawCtx.globalAlpha = opacity
+        if (tool === 'eraser') {
+          drawCtx.globalCompositeOperation = 'destination-out'
+        }
+        drawCtx.moveTo(currentStroke.points[0].x, currentStroke.points[0].y)
+      }
+    })
+
+    drawCanvas.addEventListener('pointermove', (e) => {
+      if (!isDrawing) return
+      e.preventDefault()
+      const pos = getPos(e)
+
+      if (tool === 'pen' || tool === 'eraser') {
+        currentStroke.points.push(pos)
+        drawCtx.lineTo(pos.x, pos.y)
+        drawCtx.stroke()
+        drawCtx.beginPath()
+        drawCtx.moveTo(pos.x, pos.y)
+      } else {
+        // Shape preview - update end point and redraw
+        currentStroke.points[1] = pos
+        redraw()
+        // Draw preview
+        drawCtx.globalAlpha = opacity
+        drawCtx.strokeStyle = color
+        drawCtx.lineWidth = lineWidth
+        drawCtx.lineCap = 'round'
+        drawCtx.lineJoin = 'round'
+        const start = currentStroke.points[0]
+        switch (tool) {
+          case 'arrow':
+            drawArrow(drawCtx, start, pos)
+            break
+          case 'rect':
+            drawCtx.strokeRect(start.x, start.y, pos.x - start.x, pos.y - start.y)
+            break
+          case 'circle':
+            const rx = Math.abs(pos.x - start.x) / 2
+            const ry = Math.abs(pos.y - start.y) / 2
+            const cx = start.x + (pos.x - start.x) / 2
+            const cy = start.y + (pos.y - start.y) / 2
+            drawCtx.beginPath()
+            drawCtx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+            drawCtx.stroke()
+            break
+          case 'line':
+            drawCtx.beginPath()
+            drawCtx.moveTo(start.x, start.y)
+            drawCtx.lineTo(pos.x, pos.y)
+            drawCtx.stroke()
+            break
+        }
+        drawCtx.globalAlpha = 1
+      }
+    })
+
+    function endStroke(e) {
+      if (isDrawing && currentStroke && currentStroke.points.length > 1) {
+        strokes.push(currentStroke)
+      }
+      isDrawing = false
+      currentStroke = null
+      drawCtx.globalAlpha = 1
+      drawCtx.globalCompositeOperation = 'source-over'
+      if (e?.pointerId) {
+        drawCanvas.releasePointerCapture(e.pointerId)
+      }
+      redraw()
+    }
+
+    drawCanvas.addEventListener('pointerup', endStroke)
+    drawCanvas.addEventListener('pointercancel', endStroke)
+
+    // Tool switching
+    function setTool(newTool) {
+      tool = newTool
+      document.querySelectorAll('.tool-group button').forEach(btn => {
+        btn.classList.toggle('active', btn.id === newTool)
+      })
+      drawCanvas.style.cursor = newTool === 'eraser' ? 'cell' : 'crosshair'
+    }
+
+    // Color switching
+    function setColor(newColor) {
+      color = newColor
+      document.querySelectorAll('.color-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.color === newColor)
+      })
+    }
+
+    // Toolbar handlers
+    document.querySelectorAll('.tool-group button').forEach(btn => {
+      btn.onclick = () => setTool(btn.id)
+    })
+
+    document.querySelectorAll('.color-btn').forEach(btn => {
+      btn.onclick = () => setColor(btn.dataset.color)
+    })
+
+    document.getElementById('size').oninput = (e) => lineWidth = parseInt(e.target.value)
+    document.getElementById('opacity').oninput = (e) => opacity = parseFloat(e.target.value)
+
+    document.getElementById('undo').onclick = () => {
+      strokes.pop()
+      redraw()
+    }
+
+    document.getElementById('clear').onclick = () => {
+      strokes = []
+      redraw()
+    }
+
+    // Mute toggle
+    document.getElementById('mute').onclick = () => {
+      isMuted = !isMuted
+      player.setAttribute('muted', isMuted ? '' : null)
+      if (!isMuted) player.removeAttribute('muted')
+      document.getElementById('mute').textContent = isMuted ? 'Mute' : 'Unmute'
+      document.getElementById('mute').classList.toggle('active', !isMuted)
+    }
+
+    // Fullscreen
+    document.getElementById('fullscreen').onclick = () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen()
+      } else {
+        document.documentElement.requestFullscreen()
+      }
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return
+
+      switch (e.key.toLowerCase()) {
+        case 'u': strokes.pop(); redraw(); break
+        case 'c': strokes = []; redraw(); break
+        case 'p': setTool('pen'); break
+        case 'a': setTool('arrow'); break
+        case 'r': setTool('rect'); break
+        case 'o': setTool('circle'); break
+        case 'l': setTool('line'); break
+        case 'e': setTool('eraser'); break
+        case 'm':
+          document.getElementById('mute').click()
+          break
+        case 'f':
+          document.getElementById('fullscreen').click()
+          break
+        case '1': case '2': case '3': case '4': case '5':
+          setColor(colors[parseInt(e.key) - 1])
+          break
+        case '+': case '=':
+          lineWidth = Math.min(20, lineWidth + 1)
+          document.getElementById('size').value = lineWidth
+          break
+        case '-':
+          lineWidth = Math.max(2, lineWidth - 1)
+          document.getElementById('size').value = lineWidth
+          break
+      }
+    })
+
+    // Fetch available streams
+    const client = new MediaMTXClient(apiUrl)
+
+    async function loadStreams() {
+      try {
+        const streams = await client.listPaths()
+        const currentValue = sourceSelect.value
+        sourceSelect.innerHTML = '<option value="">Select source...</option>'
+
+        streams.forEach(stream => {
+          const option = document.createElement('option')
+          option.value = '/' + stream.name
+          option.textContent = stream.name + (stream.ready ? ' (live)' : '')
+          sourceSelect.appendChild(option)
+        })
+
+        // Restore selection
+        if (currentValue) {
+          sourceSelect.value = currentValue
+        } else if (src) {
+          sourceSelect.value = src
+        }
+
+        // Initial load - connect if src provided
+        if (!initialLoadDone && src) {
+          player.setAttribute('src', src)
+          publishTo = publishTo || `${src}-annotated`
+          document.getElementById('status').textContent = `Source: ${src}`
+          await player.updateComplete
+          player.connect()
+          initialLoadDone = true
+        }
+      } catch (err) {
+        console.error('Failed to load streams:', err)
+        if (!initialLoadDone) {
+          sourceSelect.innerHTML = '<option value="">Failed to load streams</option>'
+        }
+      }
+    }
+
+    loadStreams()
+    // Refresh stream list periodically
+    setInterval(loadStreams, 10000)
+
+    // Handle stream selection
+    sourceSelect.onchange = async (e) => {
+      src = e.target.value
+      if (src) {
+        player.setAttribute('src', src)
+        publishTo = `${src}-annotated`
+        document.getElementById('status').textContent = `Source: ${src}`
+        // Clear annotations when switching sources
+        strokes = []
+        redraw()
+        // Trigger connection
+        await player.updateComplete
+        player.connect()
+      }
+    }
+
+    // Compositing render loop
+    function renderComposite() {
+      const video = player.shadowRoot?.querySelector('video')
+
+      if (video && video.readyState >= 2) {
+        // Draw video frame
+        outputCtx.drawImage(video, 0, 0, outputCanvas.width, outputCanvas.height)
+        // Draw annotations on top
+        outputCtx.drawImage(drawCanvas, 0, 0)
+      }
+
+      animationId = requestAnimationFrame(renderComposite)
+    }
+
+    // Publish annotated stream
+    document.getElementById('publish').onclick = async () => {
+      const btn = document.getElementById('publish')
+      const status = document.getElementById('status')
+
+      if (isPublishing) {
+        // Stop publishing
+        if (animationId) cancelAnimationFrame(animationId)
+        whipClient?.disconnect()
+        whipClient = null
+        isPublishing = false
+        btn.textContent = 'Publish'
+        btn.classList.remove('active')
+        status.textContent = 'Not publishing'
+        status.classList.remove('live')
+        return
+      }
+
+      try {
+        btn.textContent = 'Connecting...'
+        status.textContent = 'Connecting...'
+
+        // Start compositing loop
+        renderComposite()
+
+        // Capture the output canvas at selected fps
+        const fps = parseInt(document.getElementById('quality').value)
+        const stream = outputCanvas.captureStream(fps)
+
+        // Add audio from original video if available
+        const video = player.shadowRoot?.querySelector('video')
+        if (video?.srcObject) {
+          const audioTracks = video.srcObject.getAudioTracks()
+          audioTracks.forEach(track => stream.addTrack(track.clone()))
+        }
+
+        // WHIP to MediaMTX
+        whipClient = new WhipClient(`${server}${publishTo}/whip`)
+        await whipClient.publish(stream)
+
+        isPublishing = true
+        btn.textContent = 'Stop'
+        btn.classList.add('active')
+        status.textContent = `LIVE ${fps}fps: ${publishTo}`
+        status.classList.add('live')
+
+        console.log(`Publishing annotated stream to ${publishTo} at ${fps}fps`)
+      } catch (err) {
+        console.error('Failed to publish:', err)
+        btn.textContent = 'Publish'
+        status.textContent = 'Error: ' + err.message
+        if (animationId) cancelAnimationFrame(animationId)
+      }
+    }
+
+    // Update status with stream info
+    if (src) {
+      document.getElementById('status').textContent = `Source: ${src}`
+    } else {
+      document.getElementById('status').textContent = 'Select a source stream'
+    }
+  </script>
+</body>
+</html>

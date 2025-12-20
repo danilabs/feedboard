@@ -621,18 +621,25 @@ export class FeedboardPlayer extends LitElement {
 
   private getServer(): string {
     // Look for server from parent elements or use attribute
-    if (this.server) return this.server
+    if (this.server) {
+      console.log('[feedboard-player] Using server attribute:', this.server)
+      return this.server
+    }
 
     // Walk up the DOM to find a server attribute
     let parent = this.parentElement
     while (parent) {
       const serverAttr = parent.getAttribute('server')
-      if (serverAttr) return serverAttr
+      if (serverAttr) {
+        console.log('[feedboard-player] Using parent server:', serverAttr)
+        return serverAttr
+      }
       parent = parent.parentElement
     }
 
-    // Default to current origin
-    return window.location.origin.replace(':3000', ':8889')
+    // Default to same origin - works behind proxy/ngrok
+    console.log('[feedboard-player] Using origin:', window.location.origin)
+    return window.location.origin
   }
 
   private resolveUrl(): { whepUrl?: string; hlsUrl?: string } {
@@ -652,7 +659,7 @@ export class FeedboardPlayer extends LitElement {
 
     return {
       whepUrl: `${server}/${cleanPath}/whep`,
-      hlsUrl: `${server.replace(':8889', ':8888')}/${cleanPath}/index.m3u8`,
+      hlsUrl: `${server}/${cleanPath}/index.m3u8`,
     }
   }
 
