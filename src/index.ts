@@ -10,6 +10,7 @@ import './elements/feedboard-capture'
 import './elements/feedboard-slot'
 import './elements/feedboard-app'
 import './elements/feedboard-header'
+import './elements/feedboard-vu'
 
 // Export classes for programmatic use
 export { FeedboardPlayer } from './elements/feedboard-player'
@@ -20,6 +21,7 @@ export { FeedboardCapture } from './elements/feedboard-capture'
 export { FeedboardSlot, type SlotConfig } from './elements/feedboard-slot'
 export { FeedboardApp } from './elements/feedboard-app'
 export { FeedboardHeader } from './elements/feedboard-header'
+export { FeedboardVu } from './elements/feedboard-vu'
 
 // Export utilities
 export { MediaMTXClient } from './lib/mediamtx-api'

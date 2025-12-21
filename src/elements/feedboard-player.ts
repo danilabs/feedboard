@@ -2,9 +2,9 @@ import { LitElement, html, css } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { WhepClient } from '@/lib/whep-client'
 import { HlsPlayer } from '@/lib/hls-player'
-import { PPMMeter, dbfsToPercent, type PPMMeterData } from '@/lib/ppm-meter'
 import { icons } from '@/lib/icons'
 import { getWebrtcUrl, getHlsUrl, buildWhepUrl, buildHlsUrl, buildThumbnailUrl, getStreamToken } from '@/lib/config'
+import './feedboard-vu'
 
 type Protocol = 'auto' | 'whep' | 'hls'
 type FitMode = 'contain' | 'cover' | 'fill'
@@ -316,81 +316,6 @@ export class FeedboardPlayer extends LitElement {
       z-index: 15;
     }
 
-    /* PPM Meter */
-    .ppm-meter {
-      position: absolute;
-      right: 0.5rem;
-      top: 0.5rem;
-      bottom: 0.5rem;
-      width: 8px;
-      background: rgba(0, 0, 0, 0.7);
-      border-radius: 4px;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column-reverse;
-      z-index: 15;
-    }
-
-    .ppm-meter.stereo {
-      width: 18px;
-      display: flex;
-      flex-direction: row;
-      gap: 2px;
-      padding: 2px;
-    }
-
-    .ppm-channel {
-      flex: 1;
-      display: flex;
-      flex-direction: column-reverse;
-      position: relative;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 2px;
-      overflow: hidden;
-    }
-
-    .ppm-level {
-      background: linear-gradient(to top,
-        #22c55e 0%,
-        #22c55e 70%,      /* Green: -60 to -18 dBFS */
-        #eab308 70%,
-        #eab308 90%,      /* Yellow: -18 to -6 dBFS */
-        #dc2626 90%       /* Red: -6 to 0 dBFS */
-      );
-      transition: height 0.02s linear;
-      width: 100%;
-    }
-
-    .ppm-peak {
-      position: absolute;
-      left: 0;
-      right: 0;
-      height: 2px;
-      background: #fff;
-      transition: bottom 0.02s linear;
-    }
-
-    /* dBFS scale markers (optional, shown on hover) */
-    .ppm-meter:hover::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      right: 0;
-      top: 10%;
-      height: 1px;
-      background: rgba(255, 255, 255, 0.3);
-    }
-
-    .ppm-meter:hover::after {
-      content: '';
-      position: absolute;
-      left: 0;
-      right: 0;
-      top: 30%;
-      height: 1px;
-      background: rgba(255, 255, 255, 0.2);
-    }
-
     /* Click to play overlay */
     .click-to-play {
       position: absolute;
@@ -483,6 +408,7 @@ export class FeedboardPlayer extends LitElement {
   @state() status: Status = 'idle'
   @state() private errorMessage = ''
   @state() private needsClick = false
+  @state() private waitingForPlayback = false
   @state() activeProtocol: 'whep' | 'hls' | null = null
   @state() private thumbnailUrl: string | null = null
   @property({ type: Boolean, attribute: 'show-info' }) showInfo = false
@@ -491,9 +417,9 @@ export class FeedboardPlayer extends LitElement {
   @property({ type: String }) label = ''
   @property({ type: Boolean, attribute: 'show-label' }) showLabel = false
 
-  // PPM meter properties
+  // VU meter properties
   @property({ type: Boolean, attribute: 'show-vu' }) showVu = false
-  @state() private meterData: PPMMeterData | null = null
+  @state() private currentStream: MediaStream | null = null
 
   // Stream stats
   @state() private streamStats: {
@@ -507,7 +433,6 @@ export class FeedboardPlayer extends LitElement {
   private whepClient: WhepClient | null = null
   private hlsPlayer: HlsPlayer | null = null
   private videoElement: HTMLVideoElement | null = null
-  private ppmMeter: PPMMeter | null = null
   private hasConnected = false
   private statsInterval: number | null = null
   private lastBytesReceived = 0
@@ -523,7 +448,6 @@ export class FeedboardPlayer extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback()
     this.disconnect()
-    this.stopPPMMeter()
     this.stopStatsPolling()
   }
 
@@ -537,36 +461,6 @@ export class FeedboardPlayer extends LitElement {
       return path
     }
     return ''
-  }
-
-  private async startPPMMeter() {
-    if (this.ppmMeter) return
-
-    try {
-      const srcObject = this.videoElement?.srcObject as MediaStream | null
-      if (!srcObject) return
-
-      const audioTracks = srcObject.getAudioTracks()
-      if (!audioTracks.length) return
-
-      this.ppmMeter = new PPMMeter({
-        onData: (data) => {
-          this.meterData = data
-        }
-      })
-
-      await this.ppmMeter.connect(srcObject)
-    } catch (e) {
-      console.warn('Could not start PPM meter:', e)
-    }
-  }
-
-  private stopPPMMeter() {
-    if (this.ppmMeter) {
-      this.ppmMeter.disconnect()
-      this.ppmMeter = null
-    }
-    this.meterData = null
   }
 
   private startStatsPolling() {
@@ -725,15 +619,14 @@ export class FeedboardPlayer extends LitElement {
             this.status = 'playing' // Stream is connected, just paused
             this.hasConnected = true
             this.activeProtocol = 'whep'
+            this.currentStream = null // VU meter waits for playback
             return
           }
           throw playError
         }
         this.activeProtocol = 'whep'
-        // Start PPM meter for WHEP streams (has audio track access)
-        if (this.showVu) {
-          this.startPPMMeter()
-        }
+        // Playback started - enable VU meter
+        this.currentStream = stream
         // Start stats polling if info panel is shown
         if (this.showInfo) {
           this.startStatsPolling()
@@ -779,7 +672,7 @@ export class FeedboardPlayer extends LitElement {
   }
 
   disconnect() {
-    this.stopPPMMeter()
+    this.currentStream = null
     if (this.whepClient) {
       this.whepClient.disconnect()
       this.whepClient = null
@@ -797,15 +690,6 @@ export class FeedboardPlayer extends LitElement {
   }
 
   updated(changedProperties: Map<string, unknown>) {
-    // Start/stop PPM meter when showVu changes
-    if (changedProperties.has('showVu')) {
-      if (this.showVu && this.status === 'playing' && this.activeProtocol === 'whep') {
-        this.startPPMMeter()
-      } else if (!this.showVu) {
-        this.stopPPMMeter()
-      }
-    }
-
     // Start/stop stats polling when showInfo changes
     if (changedProperties.has('showInfo')) {
       if (this.showInfo && this.status === 'playing' && this.activeProtocol === 'whep') {
@@ -830,16 +714,21 @@ export class FeedboardPlayer extends LitElement {
 
   private async handlePlayClick() {
     if (this.videoElement) {
+      this.waitingForPlayback = true
       try {
         await this.videoElement.play()
         this.needsClick = false
-        if (this.showVu && this.activeProtocol === 'whep') {
-          this.startPPMMeter()
+        this.waitingForPlayback = false
+        // Playback started - enable VU meter
+        const stream = this.videoElement.srcObject as MediaStream | null
+        if (stream) {
+          this.currentStream = stream
         }
         // Notify parent that user has interacted - other players can retry
         this.dispatchEvent(new CustomEvent('user-gesture', { bubbles: true, composed: true }))
       } catch (e) {
         console.warn('Play failed:', e)
+        this.waitingForPlayback = false
       }
     }
   }
@@ -850,8 +739,10 @@ export class FeedboardPlayer extends LitElement {
       try {
         await this.videoElement.play()
         this.needsClick = false
-        if (this.showVu && this.activeProtocol === 'whep') {
-          this.startPPMMeter()
+        // Playback started - enable VU meter
+        const stream = this.videoElement.srcObject as MediaStream | null
+        if (stream) {
+          this.currentStream = stream
         }
       } catch (e) {
         // Still needs direct interaction
@@ -873,8 +764,8 @@ export class FeedboardPlayer extends LitElement {
 
   render() {
     const isError = this.status === 'error'
-    // Show slate when not playing, OR when waiting for click interaction
-    const showSlate = this.status !== 'playing' || this.needsClick
+    // Show slate when not playing, waiting for click, or waiting for playback to start
+    const showSlate = this.status !== 'playing' || this.needsClick || this.waitingForPlayback
 
     const bg = isError ? this.errorBackground : this.slateBackground
     const color = isError ? this.errorColor : this.slateColor
@@ -889,45 +780,28 @@ export class FeedboardPlayer extends LitElement {
         class="slate ${showSlate ? '' : 'hidden'} ${this.thumbnailUrl && this.status === 'connecting' ? 'has-thumbnail' : ''}"
         style="${thumbnailStyle} color: ${color};"
       >
-        ${this.status === 'connecting' ? html`<div class="spinner"></div>` : ''}
-        ${this.needsClick ? html`
+        ${this.status === 'connecting' || this.waitingForPlayback ? html`<div class="spinner"></div>` : ''}
+        ${this.needsClick && !this.waitingForPlayback ? html`
           <div class="play-button-slate" @click=${this.handlePlayClick}></div>
         ` : ''}
         <div class="slate-text">${this.src || 'No source'}</div>
         ${this.status === 'connecting'
           ? html`<div class="slate-subtext">Connecting...</div>`
-          : this.status === 'error'
-            ? html`<div class="slate-subtext">${this.errorMessage}</div>`
-            : this.status === 'idle'
-              ? html`<div class="slate-subtext">Waiting</div>`
-              : this.needsClick
-                ? html`<div class="slate-subtext">Click to play</div>`
-                : ''}
+          : this.waitingForPlayback
+            ? html`<div class="slate-subtext">Starting playback...</div>`
+            : this.status === 'error'
+              ? html`<div class="slate-subtext">${this.errorMessage}</div>`
+              : this.status === 'idle'
+                ? html`<div class="slate-subtext">Waiting</div>`
+                : this.needsClick
+                  ? html`<div class="slate-subtext">Click to play</div>`
+                  : ''}
       </div>
       ${this.showLabel && this.status === 'playing' && !this.needsClick ? html`
         <div class="label-overlay">${this.getDisplayLabel()}</div>
       ` : ''}
-      ${this.showVu && this.meterData ? html`
-        <div class="ppm-meter ${this.meterData.channels > 1 ? 'stereo' : ''}">
-          ${this.meterData.channels > 1 ? html`
-            <!-- Stereo: Left channel -->
-            <div class="ppm-channel">
-              <div class="ppm-level" style="height: ${dbfsToPercent(this.meterData.level[0])}%"></div>
-              <div class="ppm-peak" style="bottom: ${dbfsToPercent(this.meterData.peak[0])}%"></div>
-            </div>
-            <!-- Stereo: Right channel -->
-            <div class="ppm-channel">
-              <div class="ppm-level" style="height: ${dbfsToPercent(this.meterData.level[1])}%"></div>
-              <div class="ppm-peak" style="bottom: ${dbfsToPercent(this.meterData.peak[1])}%"></div>
-            </div>
-          ` : html`
-            <!-- Mono -->
-            <div class="ppm-channel">
-              <div class="ppm-level" style="height: ${dbfsToPercent(this.meterData.level[0])}%"></div>
-              <div class="ppm-peak" style="bottom: ${dbfsToPercent(this.meterData.peak[0])}%"></div>
-            </div>
-          `}
-        </div>
+      ${this.showVu && this.currentStream ? html`
+        <feedboard-vu .stream=${this.currentStream}></feedboard-vu>
       ` : ''}
       ${this.showInfo ? html`
         <div class="info-overlay">
