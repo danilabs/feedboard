@@ -358,15 +358,20 @@ export class FeedboardApp extends LitElement {
 
     .grid-container {
       flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       padding: 1rem;
-      overflow: auto;
+      overflow: hidden;
+      min-height: 0;
+      container-type: size;
     }
 
     .layout-grid {
       background: #111;
-      width: 100%;
-      justify-content: center;
-      align-content: center;
+      aspect-ratio: 16/9;
+      width: min(100cqw, calc(100cqh * 16 / 9));
+      height: min(100cqh, calc(100cqw * 9 / 16));
     }
 
     feedboard-grid {
@@ -974,9 +979,9 @@ export class FeedboardApp extends LitElement {
 
   private handleUserGesture = () => {
     // User clicked play on one video - retry all other players
-    const players = this.shadowRoot?.querySelectorAll('feedboard-player') as NodeListOf<any>
-    players?.forEach((player) => {
-      player.retryPlay?.()
+    const slots = this.shadowRoot?.querySelectorAll('feedboard-slot') as NodeListOf<any>
+    slots?.forEach((slot) => {
+      slot.retryPlay?.()
     })
   }
 

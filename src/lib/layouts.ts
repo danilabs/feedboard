@@ -16,7 +16,7 @@ export const layouts: LayoutTemplate[] = [
     id: '1x1',
     name: 'Single',
     slots: [{ id: 'slot-0' }],
-    containerStyle: 'display: grid; grid-template-columns: 1fr;',
+    containerStyle: 'display: grid; grid-template-columns: 1fr; grid-template-rows: 1fr;',
   },
   {
     id: '2x2',
@@ -27,7 +27,7 @@ export const layouts: LayoutTemplate[] = [
       { id: 'slot-2' },
       { id: 'slot-3' },
     ],
-    containerStyle: 'display: grid; grid-template-columns: 1fr 1fr;',
+    containerStyle: 'display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;',
   },
   {
     id: '3x3',
@@ -43,13 +43,13 @@ export const layouts: LayoutTemplate[] = [
       { id: 'slot-7' },
       { id: 'slot-8' },
     ],
-    containerStyle: 'display: grid; grid-template-columns: repeat(3, 1fr);',
+    containerStyle: 'display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);',
   },
   {
     id: '4x4',
     name: '4×4',
     slots: Array.from({ length: 16 }, (_, i) => ({ id: `slot-${i}` })),
-    containerStyle: 'display: grid; grid-template-columns: repeat(4, 1fr);',
+    containerStyle: 'display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(4, 1fr);',
   },
   {
     id: 'focus',
@@ -65,7 +65,7 @@ export const layouts: LayoutTemplate[] = [
     containerStyle: `
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
-      grid-template-rows: auto auto auto;
+      grid-template-rows: 1fr 1fr 1fr;
       grid-template-areas:
         "main main s1"
         "main main s2"

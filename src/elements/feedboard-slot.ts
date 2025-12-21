@@ -23,7 +23,9 @@ export class FeedboardSlot extends LitElement {
       min-height: 0;
       overflow: hidden;
       box-sizing: border-box;
-      aspect-ratio: 16/9;
+      /* Fill grid cell - parent grid maintains 16:9 */
+      width: 100%;
+      height: 100%;
     }
 
     .slot {
@@ -153,6 +155,12 @@ export class FeedboardSlot extends LitElement {
         composed: true,
       })
     )
+  }
+
+  /** Retry playback on the internal player (for autoplay unlock) */
+  retryPlay(): void {
+    const player = this.shadowRoot?.querySelector('feedboard-player') as any
+    player?.retryPlay?.()
   }
 
   private renderContent() {
