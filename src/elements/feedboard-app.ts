@@ -379,7 +379,7 @@ export class FeedboardApp extends LitElement {
       align-items: center;
       justify-content: center;
       background: #111;
-      border: 1px dashed #2a2a2a;
+      border: 1px solid #1a1a1a;
       border-radius: 4px;
       color: #333;
       font-size: 0.875rem;

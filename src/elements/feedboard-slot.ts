@@ -36,10 +36,10 @@ export class FeedboardSlot extends LitElement {
       transition: border-color 0.15s, box-shadow 0.15s;
     }
 
-    /* Empty state - dashed border */
+    /* Empty state */
     .slot.empty {
       background: #111;
-      border: 2px dashed #333;
+      border: 2px solid #222;
     }
 
     .slot.empty .empty-content {
