@@ -7,6 +7,7 @@ import './elements/feedboard-grid'
 import './elements/feedboard-clock'
 import './elements/feedboard-slate'
 import './elements/feedboard-capture'
+import './elements/feedboard-slot'
 import './elements/feedboard-app'
 import './elements/feedboard-header'
 
@@ -16,6 +17,7 @@ export { FeedboardGrid } from './elements/feedboard-grid'
 export { FeedboardClock } from './elements/feedboard-clock'
 export { FeedboardSlate } from './elements/feedboard-slate'
 export { FeedboardCapture } from './elements/feedboard-capture'
+export { FeedboardSlot, type SlotConfig } from './elements/feedboard-slot'
 export { FeedboardApp } from './elements/feedboard-app'
 export { FeedboardHeader } from './elements/feedboard-header'
 
@@ -36,6 +38,9 @@ export {
   buildHlsUrl,
   getStreamToken,
 } from './lib/config'
+
+// Layouts
+export { layouts, getLayout, getLayoutIds, type LayoutTemplate, type LayoutSlot } from './lib/layouts'
 
 // Types
 export type { MediaMTXPath, MediaMTXPathList } from './types/mediamtx'

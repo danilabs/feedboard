@@ -1,0 +1,244 @@
+import { LitElement, html, css } from 'lit'
+import { customElement, property, state } from 'lit/decorators.js'
+
+export interface SlotConfig {
+  type: 'stream' | 'clock' | 'slate' | 'capture' | 'empty'
+  src?: string
+  text?: string
+  timezone?: string
+  label?: string
+  format?: string
+  background?: string
+  color?: string
+  publishPath?: string
+}
+
+@customElement('feedboard-slot')
+export class FeedboardSlot extends LitElement {
+  static styles = css`
+    :host {
+      display: block;
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      box-sizing: border-box;
+      aspect-ratio: 16/9;
+    }
+
+    .slot {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      border: 2px solid transparent;
+      border-radius: 4px;
+      box-sizing: border-box;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    /* Empty state - dashed border */
+    .slot.empty {
+      background: #111;
+      border: 2px dashed #333;
+    }
+
+    .slot.empty .empty-content {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      color: #333;
+      font-size: 1.5rem;
+      font-weight: 500;
+    }
+
+    /* Selected state */
+    .slot.selected {
+      border-color: #3b82f6;
+      border-style: solid;
+    }
+
+    /* Drag over state */
+    .slot.dragover {
+      border-color: #22c55e;
+      border-style: solid;
+      box-shadow: inset 0 0 20px rgba(34, 197, 94, 0.2);
+    }
+
+    /* Content fills the slot */
+    .content {
+      width: 100%;
+      height: 100%;
+    }
+
+    .content > * {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Fullscreen mode */
+    :host(.fullscreen) {
+      position: fixed !important;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 200;
+    }
+
+    :host(.fullscreen) .slot {
+      border-radius: 0;
+    }
+  `
+
+  @property({ type: Object }) config: SlotConfig = { type: 'empty' }
+  @property({ type: Boolean }) selected = false
+  @property({ type: Number }) index = 0
+  @property({ type: String }) server = ''
+  @property({ type: Boolean, attribute: 'show-info' }) showInfo = false
+  @property({ type: Boolean, attribute: 'show-label' }) showLabel = true
+  @property({ type: Boolean, attribute: 'show-vu' }) showVu = true
+
+  @state() private dragOver = false
+
+  private handleDragOver = (e: DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy'
+    }
+    this.dragOver = true
+  }
+
+  private handleDragLeave = (e: DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    this.dragOver = false
+  }
+
+  private handleDrop = (e: DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    this.dragOver = false
+
+    const streamPath = e.dataTransfer?.getData('text/plain')
+    if (streamPath) {
+      this.dispatchEvent(
+        new CustomEvent('slot-drop', {
+          detail: { path: streamPath, index: this.index },
+          bubbles: true,
+          composed: true,
+        })
+      )
+    }
+  }
+
+  private handleClick = () => {
+    this.dispatchEvent(
+      new CustomEvent('slot-select', {
+        detail: { index: this.index },
+        bubbles: true,
+        composed: true,
+      })
+    )
+  }
+
+  private handleDblClick = (e: Event) => {
+    e.preventDefault()
+    this.dispatchEvent(
+      new CustomEvent('slot-fullscreen', {
+        detail: { index: this.index },
+        bubbles: true,
+        composed: true,
+      })
+    )
+  }
+
+  private renderContent() {
+    const { config } = this
+
+    switch (config.type) {
+      case 'stream':
+        return html`
+          <feedboard-player
+            src=${config.src || ''}
+            server=${this.server}
+            label=${config.label || ''}
+            ?show-info=${this.showInfo}
+            ?show-label=${this.showLabel}
+            ?show-vu=${this.showVu}
+          ></feedboard-player>
+        `
+
+      case 'clock':
+        return html`
+          <feedboard-clock
+            .format=${config.format || 'HH:mm:ss'}
+            .timezone=${config.timezone || ''}
+            .label=${config.label || ''}
+            .background=${config.background || '#000'}
+            .color=${config.color || '#fff'}
+          ></feedboard-clock>
+        `
+
+      case 'slate':
+        return html`
+          <feedboard-slate
+            text=${config.text || ''}
+            background=${config.background || '#1a1a1a'}
+            color=${config.color || '#fff'}
+          ></feedboard-slate>
+        `
+
+      case 'capture':
+        return html`
+          <feedboard-capture
+            server=${this.server}
+            publish-to=${config.publishPath || ''}
+            ?show-info=${this.showInfo}
+            ?show-label=${this.showLabel}
+            ?show-vu=${this.showVu}
+          ></feedboard-capture>
+        `
+
+      default:
+        return html`
+          <div class="empty-content">${this.index + 1}</div>
+        `
+    }
+  }
+
+  render() {
+    const isEmpty = this.config.type === 'empty'
+    const classes = [
+      'slot',
+      isEmpty ? 'empty' : '',
+      this.selected ? 'selected' : '',
+      this.dragOver ? 'dragover' : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+
+    return html`
+      <div
+        class=${classes}
+        @click=${this.handleClick}
+        @dblclick=${this.handleDblClick}
+        @dragover=${this.handleDragOver}
+        @dragleave=${this.handleDragLeave}
+        @drop=${this.handleDrop}
+      >
+        <div class="content">
+          ${this.renderContent()}
+        </div>
+      </div>
+    `
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'feedboard-slot': FeedboardSlot
+  }
+}

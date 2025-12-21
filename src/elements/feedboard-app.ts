@@ -10,21 +10,10 @@ import {
   buildThumbnailUrl,
 } from '@/lib/config'
 import { getThumbnailerClient, type ThumbnailerClient } from '@/lib/thumbnailer-client'
+import { layouts, getLayout, type LayoutTemplate } from '@/lib/layouts'
 import './feedboard-header'
-
-type GridLayout = '1x1' | '2x2' | '3x3' | '4x4'
-
-interface CellConfig {
-  type: 'stream' | 'clock' | 'slate' | 'capture' | 'empty'
-  src?: string
-  text?: string
-  timezone?: string
-  label?: string
-  format?: string
-  background?: string
-  color?: string
-  publishPath?: string
-}
+import './feedboard-slot'
+import type { SlotConfig } from './feedboard-slot'
 
 @customElement('feedboard-app')
 export class FeedboardApp extends LitElement {
@@ -55,10 +44,19 @@ export class FeedboardApp extends LitElement {
       flex-shrink: 0;
       margin-left: -280px;
       transition: margin-left 0.2s ease;
+      pointer-events: auto;
+      touch-action: auto;
     }
 
     .sidebar.visible {
       margin-left: 0;
+      position: relative;
+      z-index: 100;
+    }
+
+    .sidebar button {
+      pointer-events: auto;
+      cursor: pointer;
     }
 
     .sidebar-header {
@@ -180,10 +178,14 @@ export class FeedboardApp extends LitElement {
       padding: 0.5rem 0.625rem;
       margin-bottom: 2px;
       border-radius: 6px;
-      cursor: pointer;
+      cursor: grab;
       transition: all 0.15s;
       background: #161616;
       border: 1px solid transparent;
+    }
+
+    .stream-item:active {
+      cursor: grabbing;
     }
 
     .stream-item.has-thumb {
@@ -320,6 +322,8 @@ export class FeedboardApp extends LitElement {
       height: auto;
       padding: 0.625rem 1rem;
       opacity: 1;
+      position: relative;
+      z-index: 100;
     }
 
     .toolbar span {
@@ -355,7 +359,14 @@ export class FeedboardApp extends LitElement {
     .grid-container {
       flex: 1;
       padding: 1rem;
-      overflow: hidden;
+      overflow: auto;
+    }
+
+    .layout-grid {
+      background: #111;
+      width: 100%;
+      justify-content: center;
+      align-content: center;
     }
 
     feedboard-grid {
@@ -416,6 +427,11 @@ export class FeedboardApp extends LitElement {
 
     .sources-list {
       padding: 0.375rem;
+    }
+
+    .sources-list .stream-item {
+      cursor: pointer;
+      -webkit-user-drag: none;
     }
 
     .source-item {
@@ -799,8 +815,8 @@ export class FeedboardApp extends LitElement {
   @property({ type: String, attribute: 'storage-key' }) storageKey = 'feedboard-layout'
 
   @state() private streams: MediaMTXPath[] = []
-  @state() private layout: GridLayout = '2x2'
-  @state() private cells: CellConfig[] = []
+  @state() private layout: string = '2x2'
+  @state() private cells: SlotConfig[] = []
   @state() private selectedCell: number | null = null
   @state() private loading = false
   @state() private isFullscreen = false
@@ -1086,9 +1102,9 @@ export class FeedboardApp extends LitElement {
 
     // G to cycle grid size
     if (e.key === 'g' && !e.ctrlKey && !e.metaKey) {
-      const layouts: GridLayout[] = ['1x1', '2x2', '3x3', '4x4']
-      const currentIndex = layouts.indexOf(this.layout)
-      this.setLayout(layouts[(currentIndex + 1) % layouts.length])
+      const layoutIds = layouts.map((l) => l.id)
+      const currentIndex = layoutIds.indexOf(this.layout)
+      this.setLayout(layoutIds[(currentIndex + 1) % layoutIds.length])
     }
 
     // F for fullscreen
@@ -1102,8 +1118,14 @@ export class FeedboardApp extends LitElement {
 
     // Arrow keys to navigate cells
     if (e.key.startsWith('Arrow') && this.selectedCell !== null) {
-      const [rows] = this.layout.split('x').map(Number)
-      const cols = rows
+      // For grid-based layouts, calculate columns from the layout ID
+      const template = this.getCurrentLayout()
+      let cols = 2 // default
+      if (template.id.includes('x')) {
+        cols = parseInt(template.id.split('x')[1]) || 2
+      } else if (template.id === 'focus') {
+        cols = 2 // Focus layout has 2 columns
+      }
       let newCell = this.selectedCell
 
       switch (e.key) {
@@ -1180,8 +1202,12 @@ export class FeedboardApp extends LitElement {
   }
 
   private getGridCellCount(): number {
-    const [rows, cols] = this.layout.split('x').map(Number)
-    return rows * cols
+    const template = getLayout(this.layout)
+    return template?.slots.length || 4
+  }
+
+  private getCurrentLayout(): LayoutTemplate {
+    return getLayout(this.layout) || layouts[1] // Default to 2x2
   }
 
   private async fetchStreams() {
@@ -1196,7 +1222,7 @@ export class FeedboardApp extends LitElement {
     }
   }
 
-  private setLayout(layout: GridLayout) {
+  private setLayout(layout: string) {
     this.layout = layout
     this.initCells()
     this.selectedCell = null
@@ -1233,6 +1259,23 @@ export class FeedboardApp extends LitElement {
     newCells[index] = { type: 'empty' }
     this.cells = newCells
     this.saveState()
+  }
+
+  // Slot event handlers
+  private handleSlotDrop = (e: CustomEvent<{ path: string; index: number }>) => {
+    const { path, index } = e.detail
+    const newCells = [...this.cells]
+    newCells[index] = { type: 'stream', src: path.startsWith('/') ? path : `/${path}` }
+    this.cells = newCells
+    this.saveState()
+  }
+
+  private handleSlotSelect = (e: CustomEvent<{ index: number }>) => {
+    this.selectedCell = e.detail.index
+  }
+
+  private handleSlotFullscreen = (e: CustomEvent<{ index: number }>) => {
+    this.toggleCellFullscreen(e.detail.index)
   }
 
   private handleTimezoneChange(value: string) {
@@ -1320,96 +1363,40 @@ export class FeedboardApp extends LitElement {
     window.open(url, 'feedboard-annotate', 'width=900,height=700,resizable=yes')
   }
 
-  private renderCell(cell: CellConfig, index: number) {
-    const isSelected = this.selectedCell === index
-    const isCellFullscreen = this.fullscreenCell === index
-    const showingInfo = this.showInfo === index
-
-    const wrapperClasses = `cell-wrapper ${isCellFullscreen ? 'cell-fullscreen' : ''}`
-    const outline = isSelected ? 'outline: 2px solid #3b82f6;' : ''
-
-    const handleDblClick = (e: Event) => {
-      e.preventDefault()
-      this.toggleCellFullscreen(index)
-    }
-
-    const handleClick = () => {
-      this.selectedCell = index
-    }
-
-    let content
-    switch (cell.type) {
-      case 'stream':
-        content = html`
-          <feedboard-player
-            id="player-${index}"
-            src=${cell.src || ''}
-            server=${this.getServerUrl()}
-            label=${cell.label || ''}
-            ?show-info=${this.showInfo}
-            ?show-label=${this.showLabels}
-            ?show-vu=${this.showVu}
-            style="width: 100%; height: 100%;"
-          ></feedboard-player>
-        `
-        break
-      case 'clock':
-        content = html`
-          <feedboard-clock
-            .format=${cell.format || 'HH:mm:ss'}
-            .timezone=${cell.timezone || ''}
-            .label=${cell.label || ''}
-            .background=${cell.background || '#000'}
-            .color=${cell.color || '#fff'}
-            style="width: 100%; height: 100%;"
-          ></feedboard-clock>
-        `
-        break
-      case 'slate':
-        content = html`
-          <feedboard-slate
-            text=${cell.text || ''}
-            background=${cell.background || '#1a1a1a'}
-            color=${cell.color || '#fff'}
-            style="width: 100%; height: 100%;"
-          ></feedboard-slate>
-        `
-        break
-      case 'capture':
-        content = html`
-          <feedboard-capture
-            id="capture-${index}"
-            server=${this.getServerUrl()}
-            publish-to=${cell.publishPath || ''}
-            ?show-info=${this.showInfo}
-            ?show-label=${this.showLabels}
-            ?show-vu=${this.showVu}
-            style="width: 100%; height: 100%;"
-          ></feedboard-capture>
-        `
-        break
-      default:
-        content = html`
-          <div class="empty-cell" style="width: 100%; height: 100%;">
-            ${index + 1}
-          </div>
-        `
-    }
+  private renderGrid() {
+    const template = this.getCurrentLayout()
+    const containerStyle = `${template.containerStyle} gap: 4px;`
 
     return html`
       <div
-        class=${wrapperClasses}
-        style=${outline}
-        @click=${handleClick}
-        @dblclick=${handleDblClick}
+        class="layout-grid"
+        style=${containerStyle}
+        @slot-drop=${this.handleSlotDrop}
+        @slot-select=${this.handleSlotSelect}
+        @slot-fullscreen=${this.handleSlotFullscreen}
       >
-        ${content}
-        ${this.showInfo && cell.type !== 'empty' && cell.type !== 'stream' && cell.type !== 'capture' ? this.renderInfoOverlay(cell, index) : ''}
+        ${template.slots.map((slot, i) => {
+          const slotStyle = slot.gridArea ? `grid-area: ${slot.gridArea};` : ''
+          const isFullscreen = this.fullscreenCell === i
+          return html`
+            <feedboard-slot
+              style=${slotStyle}
+              class=${isFullscreen ? 'fullscreen' : ''}
+              .config=${this.cells[i] || { type: 'empty' }}
+              .index=${i}
+              .selected=${this.selectedCell === i}
+              .server=${this.getServerUrl()}
+              ?show-info=${this.showInfo}
+              ?show-label=${this.showLabels}
+              ?show-vu=${this.showVu}
+            ></feedboard-slot>
+          `
+        })}
       </div>
     `
   }
 
-  private renderInfoOverlay(cell: CellConfig, index: number) {
+  private renderInfoOverlay(cell: SlotConfig, index: number) {
     if (cell.type === 'clock') {
       return html`
         <div class="info-overlay">
@@ -1470,18 +1457,19 @@ export class FeedboardApp extends LitElement {
         <aside class="sidebar ${this.uiVisible ? 'visible' : ''}">
           <div class="sidebar-header">
             <span class="sidebar-title">Layout</span>
-            <button class="close-btn" @click=${() => this.hideUI()} title="Close (Esc)">${icons.x}</button>
+            <button class="close-btn" @click=${() => this.hideUI()} @pointerdown=${(e: Event) => { e.stopPropagation(); this.hideUI(); }} title="Close (Esc)">${icons.x}</button>
           </div>
 
         <div class="controls">
           <div class="layout-buttons">
-            ${(['1x1', '2x2', '3x3', '4x4'] as GridLayout[]).map(
+            ${layouts.map(
               (l) => html`
                 <button
-                  class="layout-btn ${this.layout === l ? 'active' : ''}"
-                  @click=${() => this.setLayout(l)}
+                  class="layout-btn ${this.layout === l.id ? 'active' : ''}"
+                  @click=${() => this.setLayout(l.id)}
+                  title=${l.name}
                 >
-                  ${l}
+                  ${l.name}
                 </button>
               `
             )}
@@ -1507,8 +1495,19 @@ export class FeedboardApp extends LitElement {
             (stream) => {
               const liveThumb = this.thumbnails.get(stream.name)
               const showThumbnails = this.thumbnailerConnected && liveThumb
+              const handleDragStart = (e: DragEvent) => {
+                if (e.dataTransfer) {
+                  e.dataTransfer.setData('text/plain', stream.name)
+                  e.dataTransfer.effectAllowed = 'copy'
+                }
+              }
               return showThumbnails ? html`
-              <div class="stream-item has-thumb" @click=${() => this.assignStreamToCell(stream.name)}>
+              <div
+                class="stream-item has-thumb"
+                draggable="true"
+                @dragstart=${handleDragStart}
+                @click=${() => this.assignStreamToCell(stream.name)}
+              >
                 <div class="stream-thumb">
                   <img src="${liveThumb}" alt="${stream.name}">
                 </div>
@@ -1527,7 +1526,12 @@ export class FeedboardApp extends LitElement {
                 </div>
               </div>
             ` : html`
-              <div class="stream-item" @click=${() => this.assignStreamToCell(stream.name)}>
+              <div
+                class="stream-item"
+                draggable="true"
+                @dragstart=${handleDragStart}
+                @click=${() => this.assignStreamToCell(stream.name)}
+              >
                 <div class="stream-status ${stream.ready ? 'ready' : ''}"></div>
                 <span class="stream-name">${stream.name}</span>
                 <span class="stream-readers">${stream.readers?.length || 0}</span>
@@ -1590,10 +1594,6 @@ export class FeedboardApp extends LitElement {
               title="Open in new window"
             >${icons.plusSquare}</button>
           </div>
-          <div class="stream-item" @click=${() => this.openAnnotateWindow()}>
-            <div class="stream-status"></div>
-            <span class="stream-name">Annotate</span>
-          </div>
         </div>
 
         <div class="shortcuts ${this.showShortcuts ? 'open' : ''}">
@@ -1650,9 +1650,7 @@ export class FeedboardApp extends LitElement {
         </div>
 
         <div class="grid-container">
-          <feedboard-grid layout=${this.layout} gap="4px">
-            ${this.cells.map((cell, i) => this.renderCell(cell, i))}
-          </feedboard-grid>
+          ${this.renderGrid()}
         </div>
         </main>
       </div>
