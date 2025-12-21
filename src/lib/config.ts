@@ -26,6 +26,7 @@ declare global {
       api?: string
       webrtc?: string
       hls?: string
+      thumbnails?: string
     }
   }
 }
@@ -35,12 +36,14 @@ const DEFAULTS = {
   apiPort: 9997,
   webrtcPort: 8889,
   hlsPort: 8888,
+  thumbnailsPort: 8090,
 }
 
 export interface FeedboardConfig {
   api: string
   webrtc: string
   hls: string
+  thumbnails?: string  // Optional - thumbnailer service URL
 }
 
 let cachedConfig: FeedboardConfig | null = null
@@ -67,6 +70,7 @@ export function getConfig(): FeedboardConfig {
       api: window.FEEDBOARD_CONFIG.api ?? '',
       webrtc: window.FEEDBOARD_CONFIG.webrtc ?? '',
       hls: window.FEEDBOARD_CONFIG.hls ?? '',
+      thumbnails: window.FEEDBOARD_CONFIG.thumbnails,  // Optional, undefined if not set
     }
     return cachedConfig
   }
@@ -77,6 +81,7 @@ export function getConfig(): FeedboardConfig {
     api: `${protocol}//${hostname}:${DEFAULTS.apiPort}`,
     webrtc: `${protocol}//${hostname}:${DEFAULTS.webrtcPort}`,
     hls: `${protocol}//${hostname}:${DEFAULTS.hlsPort}`,
+    thumbnails: `${protocol}//${hostname}:${DEFAULTS.thumbnailsPort}`,
   }
   return cachedConfig
 }
@@ -127,4 +132,23 @@ export function buildHlsUrl(path: string): string {
   const cleanPath = path.startsWith('/') ? path.slice(1) : path
   const base = getHlsUrl()
   return base ? `${base}/${cleanPath}/index.m3u8` : `/${cleanPath}/index.m3u8`
+}
+
+/**
+ * Get the thumbnails base URL (for thumbnailer service)
+ * Returns undefined if thumbnailer is not configured
+ */
+export function getThumbnailsUrl(): string | undefined {
+  return getConfig().thumbnails
+}
+
+/**
+ * Build a thumbnail URL for a given stream path
+ * Returns undefined if thumbnailer is not configured
+ */
+export function buildThumbnailUrl(path: string): string | undefined {
+  const base = getThumbnailsUrl()
+  if (!base) return undefined
+  const cleanPath = path.startsWith('/') ? path.slice(1) : path
+  return `${base}/api/streams/${cleanPath}/thumbnail.jpg`
 }

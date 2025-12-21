@@ -4,7 +4,7 @@ import { WhepClient } from '@/lib/whep-client'
 import { HlsPlayer } from '@/lib/hls-player'
 import { PPMMeter, dbfsToPercent, type PPMMeterData } from '@/lib/ppm-meter'
 import { icons } from '@/lib/icons'
-import { getWebrtcUrl, getHlsUrl, buildWhepUrl, buildHlsUrl } from '@/lib/config'
+import { getWebrtcUrl, getHlsUrl, buildWhepUrl, buildHlsUrl, buildThumbnailUrl } from '@/lib/config'
 
 type Protocol = 'auto' | 'whep' | 'hls'
 type FitMode = 'contain' | 'cover' | 'fill'
@@ -63,6 +63,16 @@ export class FeedboardPlayer extends LitElement {
 
     .slate.hidden {
       display: none;
+    }
+
+    .slate.has-thumbnail {
+      background-size: cover;
+      background-position: center;
+    }
+
+    .slate.has-thumbnail .slate-text,
+    .slate.has-thumbnail .slate-subtext {
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
     }
 
     .slate-text {
@@ -474,6 +484,7 @@ export class FeedboardPlayer extends LitElement {
   @state() private errorMessage = ''
   @state() private needsClick = false
   @state() activeProtocol: 'whep' | 'hls' | null = null
+  @state() private thumbnailUrl: string | null = null
   @property({ type: Boolean, attribute: 'show-info' }) showInfo = false
 
   // Label properties
@@ -674,6 +685,12 @@ export class FeedboardPlayer extends LitElement {
     this.status = 'connecting'
     this.errorMessage = ''
 
+    // Try to load thumbnail as loading placeholder (if thumbnailer configured)
+    const thumbUrl = buildThumbnailUrl(this.src)
+    if (thumbUrl) {
+      this.thumbnailUrl = thumbUrl
+    }
+
     const urls = this.resolveUrl()
     const useProtocol =
       this.protocol === 'auto'
@@ -860,11 +877,15 @@ export class FeedboardPlayer extends LitElement {
     const bg = isError ? this.errorBackground : this.slateBackground
     const color = isError ? this.errorColor : this.slateColor
 
+    const thumbnailStyle = this.thumbnailUrl && this.status === 'connecting'
+      ? `background-image: url(${this.thumbnailUrl}); background-color: ${bg};`
+      : `background: ${bg};`
+
     return html`
       <video data-fit=${this.fit} ?muted=${this.muted} playsinline></video>
       <div
-        class="slate ${showSlate ? '' : 'hidden'}"
-        style="background: ${bg}; color: ${color};"
+        class="slate ${showSlate ? '' : 'hidden'} ${this.thumbnailUrl && this.status === 'connecting' ? 'has-thumbnail' : ''}"
+        style="${thumbnailStyle} color: ${color};"
       >
         ${this.status === 'connecting' ? html`<div class="spinner"></div>` : ''}
         ${this.needsClick ? html`

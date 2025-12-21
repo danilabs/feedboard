@@ -3,7 +3,8 @@ import { customElement, property, state } from 'lit/decorators.js'
 import { MediaMTXClient } from '@/lib/mediamtx-api'
 import type { MediaMTXPath } from '@/types/mediamtx'
 import { icons } from '@/lib/icons'
-import { getApiUrl, getWebrtcUrl } from '@/lib/config'
+import { getApiUrl, getWebrtcUrl, getThumbnailsUrl, buildThumbnailUrl } from '@/lib/config'
+import { getThumbnailerClient, type ThumbnailerClient } from '@/lib/thumbnailer-client'
 
 type GridLayout = '1x1' | '2x2' | '3x3' | '4x4'
 
@@ -168,6 +169,43 @@ export class FeedboardApp extends LitElement {
       cursor: pointer;
       transition: background 0.15s;
       background: #1a1a1a;
+    }
+
+    .stream-item.has-thumb {
+      flex-wrap: wrap;
+      padding: 0.5rem;
+    }
+
+    .stream-thumb {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #000;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 0.25rem;
+    }
+
+    .stream-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .stream-thumb-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #333;
+      font-size: 0.65rem;
+    }
+
+    .stream-item.has-thumb .stream-info {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      width: 100%;
     }
 
     .stream-item:hover {
@@ -731,8 +769,11 @@ export class FeedboardApp extends LitElement {
   @state() private showLabels = true
   @state() private showVu = true
   @state() private showShortcuts = false
+  @state() private thumbnails: Map<string, string> = new Map()
+  @state() private thumbnailerConnected = false
 
   private client: MediaMTXClient | null = null
+  private thumbnailerClient: ThumbnailerClient | null = null
   private pollInterval: number | null = null
   private openButtonTimeout: number | null = null
 
@@ -776,6 +817,7 @@ export class FeedboardApp extends LitElement {
     super.connectedCallback()
     this.loadState()
     this.initClient()
+    this.initThumbnailer()
     this.fetchStreams()
 
     // Poll for stream updates every 5 seconds
@@ -787,6 +829,23 @@ export class FeedboardApp extends LitElement {
     this.addEventListener('mousemove', this.handleMouseActivity)
     this.addEventListener('touchstart', this.handleMouseActivity)
     this.addEventListener('user-gesture', this.handleUserGesture)
+  }
+
+  private initThumbnailer() {
+    if (!getThumbnailsUrl()) return
+
+    this.thumbnailerClient = getThumbnailerClient()
+    this.thumbnailerClient.setThumbnailCallback((stream, dataUrl) => {
+      this.thumbnails = new Map(this.thumbnails).set(stream, dataUrl)
+    })
+    this.thumbnailerClient.setConnectionCallback((connected) => {
+      this.thumbnailerConnected = connected
+      if (!connected) {
+        // Clear thumbnails when disconnected so we fall back to simple UI
+        this.thumbnails = new Map()
+      }
+    })
+    this.thumbnailerClient.connect()
   }
 
   private saveState() {
@@ -834,6 +893,9 @@ export class FeedboardApp extends LitElement {
     }
     if (this.openButtonTimeout) {
       clearTimeout(this.openButtonTimeout)
+    }
+    if (this.thumbnailerClient) {
+      this.thumbnailerClient.setThumbnailCallback(null)
     }
     window.removeEventListener('keydown', this.handleKeydown)
     document.removeEventListener('fullscreenchange', this.handleFullscreenChange)
@@ -1400,7 +1462,29 @@ export class FeedboardApp extends LitElement {
 
         <div class="streams-list">
           ${this.streams.map(
-            (stream) => html`
+            (stream) => {
+              const liveThumb = this.thumbnails.get(stream.name)
+              const showThumbnails = this.thumbnailerConnected && liveThumb
+              return showThumbnails ? html`
+              <div class="stream-item has-thumb" @click=${() => this.assignStreamToCell(stream.name)}>
+                <div class="stream-thumb">
+                  <img src="${liveThumb}" alt="${stream.name}">
+                </div>
+                <div class="stream-info">
+                  <div class="stream-status ${stream.ready ? 'ready' : ''}"></div>
+                  <span class="stream-name">${stream.name}</span>
+                  <span class="stream-readers">${stream.readers?.length || 0}</span>
+                  <button
+                    class="pop-out-btn"
+                    @click=${(e: Event) => {
+                      e.stopPropagation()
+                      this.openStreamWindow(stream.name)
+                    }}
+                    title="Open in new window"
+                  >${icons.plusSquare}</button>
+                </div>
+              </div>
+            ` : html`
               <div class="stream-item" @click=${() => this.assignStreamToCell(stream.name)}>
                 <div class="stream-status ${stream.ready ? 'ready' : ''}"></div>
                 <span class="stream-name">${stream.name}</span>
@@ -1414,7 +1498,7 @@ export class FeedboardApp extends LitElement {
                   title="Open in new window"
                 >${icons.plusSquare}</button>
               </div>
-            `
+            `}
           )}
         </div>
 
