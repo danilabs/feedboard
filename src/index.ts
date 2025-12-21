@@ -8,6 +8,7 @@ import './elements/feedboard-clock'
 import './elements/feedboard-slate'
 import './elements/feedboard-capture'
 import './elements/feedboard-app'
+import './elements/feedboard-header'
 
 // Export classes for programmatic use
 export { FeedboardPlayer } from './elements/feedboard-player'
@@ -16,6 +17,7 @@ export { FeedboardClock } from './elements/feedboard-clock'
 export { FeedboardSlate } from './elements/feedboard-slate'
 export { FeedboardCapture } from './elements/feedboard-capture'
 export { FeedboardApp } from './elements/feedboard-app'
+export { FeedboardHeader } from './elements/feedboard-header'
 
 // Export utilities
 export { MediaMTXClient } from './lib/mediamtx-api'
@@ -32,6 +34,7 @@ export {
   buildWhepUrl,
   buildWhipUrl,
   buildHlsUrl,
+  getStreamToken,
 } from './lib/config'
 
 // Types

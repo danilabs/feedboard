@@ -20,6 +20,12 @@
  * }
  */
 
+export interface FeedboardUser {
+  id: number
+  username: string
+  role: 'viewer' | 'publisher' | 'admin'
+}
+
 declare global {
   interface Window {
     FEEDBOARD_CONFIG?: {
@@ -27,7 +33,9 @@ declare global {
       webrtc?: string
       hls?: string
       thumbnails?: string
+      auth?: string  // Auth API base URL (if auth is enabled)
     }
+    FEEDBOARD_USER?: FeedboardUser | null  // Injected by auth proxy when logged in
   }
 }
 
@@ -151,4 +159,109 @@ export function buildThumbnailUrl(path: string): string | undefined {
   if (!base) return undefined
   const cleanPath = path.startsWith('/') ? path.slice(1) : path
   return `${base}/api/streams/${cleanPath}/thumbnail.jpg`
+}
+
+/**
+ * Check if auth is enabled
+ */
+export function isAuthEnabled(): boolean {
+  return !!window.FEEDBOARD_CONFIG?.auth
+}
+
+/**
+ * Get the auth API base URL
+ * Returns undefined if auth is not configured
+ */
+export function getAuthUrl(): string | undefined {
+  return window.FEEDBOARD_CONFIG?.auth
+}
+
+/**
+ * Get the current user (if logged in via auth proxy)
+ * Returns null if not logged in or auth not enabled
+ */
+export function getCurrentUser(): FeedboardUser | null {
+  return window.FEEDBOARD_USER ?? null
+}
+
+/**
+ * Check if the current user has a specific role or higher
+ */
+export function hasRole(role: 'viewer' | 'publisher' | 'admin'): boolean {
+  const user = getCurrentUser()
+  if (!user) return false
+
+  const roles = ['viewer', 'publisher', 'admin']
+  const userLevel = roles.indexOf(user.role)
+  const requiredLevel = roles.indexOf(role)
+
+  return userLevel >= requiredLevel
+}
+
+/**
+ * Check if current user is admin
+ */
+export function isAdmin(): boolean {
+  return getCurrentUser()?.role === 'admin'
+}
+
+/**
+ * Logout the current user
+ */
+export async function logout(): Promise<void> {
+  await fetch('/auth/logout', {
+    method: 'POST',
+    credentials: 'same-origin',
+  })
+  cachedStreamToken = null
+  window.location.href = '/login.html'
+}
+
+// Stream token cache
+let cachedStreamToken: string | null = null
+let tokenFetchPromise: Promise<string | null> | null = null
+
+/**
+ * Get a JWT token for stream authentication.
+ * This token can be passed to WHEP/WHIP URLs as ?jwt=xxx
+ * Returns null if not authenticated.
+ */
+export async function getStreamToken(): Promise<string | null> {
+  // Return cached token if available
+  if (cachedStreamToken) {
+    return cachedStreamToken
+  }
+
+  // If already fetching, wait for that request
+  if (tokenFetchPromise) {
+    return tokenFetchPromise
+  }
+
+  // Fetch a new token
+  tokenFetchPromise = (async () => {
+    try {
+      const res = await fetch('/auth/token', {
+        credentials: 'include',
+      })
+      if (res.ok) {
+        const data = await res.json()
+        cachedStreamToken = data.token
+        return cachedStreamToken
+      }
+    } catch {
+      // Not authenticated or auth not available
+    }
+    return null
+  })()
+
+  const token = await tokenFetchPromise
+  tokenFetchPromise = null
+  return token
+}
+
+/**
+ * Clear the cached stream token (call on logout or auth change)
+ */
+export function clearStreamToken(): void {
+  cachedStreamToken = null
 }

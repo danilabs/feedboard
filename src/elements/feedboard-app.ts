@@ -3,8 +3,14 @@ import { customElement, property, state } from 'lit/decorators.js'
 import { MediaMTXClient } from '@/lib/mediamtx-api'
 import type { MediaMTXPath } from '@/types/mediamtx'
 import { icons } from '@/lib/icons'
-import { getApiUrl, getWebrtcUrl, getThumbnailsUrl, buildThumbnailUrl } from '@/lib/config'
+import {
+  getApiUrl,
+  getWebrtcUrl,
+  getThumbnailsUrl,
+  buildThumbnailUrl,
+} from '@/lib/config'
 import { getThumbnailerClient, type ThumbnailerClient } from '@/lib/thumbnailer-client'
+import './feedboard-header'
 
 type GridLayout = '1x1' | '2x2' | '3x3' | '4x4'
 
@@ -25,6 +31,7 @@ export class FeedboardApp extends LitElement {
   static styles = css`
     :host {
       display: flex;
+      flex-direction: column;
       width: 100%;
       height: 100vh;
       background: #0a0a0a;
@@ -32,10 +39,16 @@ export class FeedboardApp extends LitElement {
       font-family: system-ui, -apple-system, sans-serif;
     }
 
+    .app-body {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
     .sidebar {
       width: 280px;
-      background: #141414;
-      border-right: 1px solid #222;
+      background: #111;
+      border-right: 1px solid #1e1e1e;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -49,101 +62,102 @@ export class FeedboardApp extends LitElement {
     }
 
     .sidebar-header {
-      padding: 1rem;
-      border-bottom: 1px solid #222;
+      padding: 0.5rem 0.875rem;
+      border-bottom: 1px solid #1e1e1e;
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       justify-content: space-between;
+      background: #0d0d0d;
     }
 
-    .sidebar-header h1 {
-      margin: 0;
-      font-size: 1.25rem;
+    .sidebar-title {
+      font-size: 0.7rem;
       font-weight: 600;
-      color: #fff;
-    }
-
-    .sidebar-header .subtitle {
-      font-size: 0.75rem;
-      color: #666;
-      margin-top: 0.25rem;
+      text-transform: uppercase;
+      color: #555;
+      letter-spacing: 0.05em;
     }
 
     .controls {
-      padding: 0.75rem;
-      border-bottom: 1px solid #222;
+      padding: 0.625rem 0.75rem;
+      border-bottom: 1px solid #1e1e1e;
+      background: #111;
     }
 
     .layout-buttons {
       display: flex;
-      gap: 0.35rem;
+      gap: 0.25rem;
     }
 
     .layout-btn {
       flex: 1;
-      padding: 0.4rem;
+      padding: 0.375rem;
       background: #1a1a1a;
-      border: 1px solid #333;
-      border-radius: 4px;
-      color: #888;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #666;
       cursor: pointer;
       font-size: 0.75rem;
+      font-weight: 500;
       transition: all 0.15s;
     }
 
     .layout-btn:hover {
-      background: #252525;
-      color: #fff;
+      background: #222;
+      border-color: #333;
+      color: #999;
     }
 
     .layout-btn.active {
-      background: #2563eb;
-      border-color: #3b82f6;
-      color: #fff;
+      background: #1e3a5f;
+      border-color: #2563eb;
+      color: #60a5fa;
     }
 
     .clear-btn {
       width: 100%;
-      margin-top: 0.35rem;
-      padding: 0.35rem;
+      margin-top: 0.375rem;
+      padding: 0.3rem;
       background: transparent;
-      border: 1px solid #333;
-      border-radius: 4px;
-      color: #555;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #444;
       cursor: pointer;
-      font-size: 0.7rem;
+      font-size: 0.65rem;
+      font-weight: 500;
       transition: all 0.15s;
     }
 
     .clear-btn:hover {
-      background: #2a1a1a;
-      border-color: #633;
-      color: #c66;
+      background: rgba(220, 38, 38, 0.1);
+      border-color: #7f1d1d;
+      color: #f87171;
     }
 
     .streams-header {
-      padding: 0.75rem 1rem;
-      font-size: 0.7rem;
+      padding: 0.625rem 0.875rem;
+      font-size: 0.6rem;
       font-weight: 600;
       text-transform: uppercase;
-      color: #666;
-      letter-spacing: 0.05em;
+      color: #444;
+      letter-spacing: 0.08em;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      background: #0d0d0d;
     }
 
     .streams-list {
       flex: 1;
       overflow-y: auto;
-      padding: 0 0.5rem 0.5rem;
+      padding: 0.375rem;
       min-height: 0;
       scrollbar-width: thin;
-      scrollbar-color: #333 transparent;
+      scrollbar-color: #2a2a2a transparent;
     }
 
     .streams-list::-webkit-scrollbar {
-      width: 6px;
+      width: 5px;
     }
 
     .streams-list::-webkit-scrollbar-track {
@@ -151,36 +165,37 @@ export class FeedboardApp extends LitElement {
     }
 
     .streams-list::-webkit-scrollbar-thumb {
-      background: #333;
+      background: #2a2a2a;
       border-radius: 3px;
     }
 
     .streams-list::-webkit-scrollbar-thumb:hover {
-      background: #444;
+      background: #3a3a3a;
     }
 
     .stream-item {
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      padding: 0.5rem 0.75rem;
+      padding: 0.5rem 0.625rem;
       margin-bottom: 2px;
-      border-radius: 4px;
+      border-radius: 6px;
       cursor: pointer;
-      transition: background 0.15s;
-      background: #1a1a1a;
+      transition: all 0.15s;
+      background: #161616;
+      border: 1px solid transparent;
     }
 
     .stream-item.has-thumb {
       flex-wrap: wrap;
-      padding: 0.5rem;
+      padding: 0.375rem;
     }
 
     .stream-thumb {
       width: 100%;
       aspect-ratio: 16/9;
-      background: #000;
-      border-radius: 3px;
+      background: #0a0a0a;
+      border-radius: 4px;
       overflow: hidden;
       margin-bottom: 0.25rem;
     }
@@ -209,48 +224,54 @@ export class FeedboardApp extends LitElement {
     }
 
     .stream-item:hover {
-      background: #252525;
+      background: #1c1c1c;
+      border-color: #2a2a2a;
     }
 
     .stream-item.selected {
       background: #1e3a5f;
+      border-color: #2563eb;
     }
 
     .stream-status {
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: #444;
+      background: #333;
       flex-shrink: 0;
     }
 
     .stream-status.ready {
       background: #22c55e;
+      box-shadow: 0 0 4px rgba(34, 197, 94, 0.4);
     }
 
     .stream-name {
       flex: 1;
-      font-size: 0.8rem;
+      font-size: 0.775rem;
+      font-weight: 450;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      color: #ccc;
     }
 
     .stream-readers {
-      font-size: 0.7rem;
-      color: #555;
+      font-size: 0.65rem;
+      color: #444;
       min-width: 1rem;
       text-align: right;
+      font-weight: 500;
     }
 
     .pop-out-btn {
-      width: 24px;
-      height: 24px;
+      width: 22px;
+      height: 22px;
       padding: 0;
       background: transparent;
       border: none;
       border-radius: 4px;
-      color: #555;
+      color: #444;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -261,8 +282,8 @@ export class FeedboardApp extends LitElement {
     }
 
     .pop-out-btn svg {
-      width: 14px;
-      height: 14px;
+      width: 13px;
+      height: 13px;
     }
 
     .stream-item:hover .pop-out-btn {
@@ -270,8 +291,8 @@ export class FeedboardApp extends LitElement {
     }
 
     .pop-out-btn:hover {
-      background: #333;
-      color: #fff;
+      background: #2a2a2a;
+      color: #888;
     }
 
     .main-area {
@@ -284,10 +305,10 @@ export class FeedboardApp extends LitElement {
     .toolbar {
       display: flex;
       align-items: center;
-      gap: 1rem;
-      padding: 0.75rem 1rem;
-      background: #141414;
-      border-bottom: 1px solid #222;
+      gap: 0.75rem;
+      padding: 0.625rem 1rem;
+      background: #111;
+      border-bottom: 1px solid #1e1e1e;
       height: 0;
       padding: 0;
       overflow: hidden;
@@ -297,30 +318,38 @@ export class FeedboardApp extends LitElement {
 
     .toolbar.visible {
       height: auto;
-      padding: 0.75rem 1rem;
+      padding: 0.625rem 1rem;
       opacity: 1;
     }
 
+    .toolbar span {
+      font-size: 0.7rem;
+      color: #555;
+      font-weight: 500;
+    }
+
     .toolbar-btn {
-      padding: 0.375rem 0.75rem;
-      background: #222;
-      border: 1px solid #333;
-      border-radius: 4px;
-      color: #888;
+      padding: 0.3rem 0.625rem;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #666;
       cursor: pointer;
-      font-size: 0.75rem;
+      font-size: 0.7rem;
+      font-weight: 500;
       transition: all 0.15s;
     }
 
     .toolbar-btn:hover {
-      background: #333;
-      color: #fff;
+      background: #222;
+      border-color: #333;
+      color: #999;
     }
 
     .toolbar-btn.active {
-      background: #2563eb;
-      border-color: #3b82f6;
-      color: #fff;
+      background: #1e3a5f;
+      border-color: #2563eb;
+      color: #60a5fa;
     }
 
     .grid-container {
@@ -338,20 +367,22 @@ export class FeedboardApp extends LitElement {
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #1a1a1a;
-      border: 2px dashed #333;
-      color: #444;
+      background: #111;
+      border: 1px dashed #2a2a2a;
+      border-radius: 4px;
+      color: #333;
       font-size: 0.875rem;
+      font-weight: 500;
     }
 
     .refresh-btn {
-      width: 24px;
-      height: 24px;
+      width: 20px;
+      height: 20px;
       padding: 0;
       background: transparent;
       border: none;
       border-radius: 4px;
-      color: #555;
+      color: #333;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -360,30 +391,31 @@ export class FeedboardApp extends LitElement {
     }
 
     .refresh-btn svg {
-      width: 14px;
-      height: 14px;
+      width: 12px;
+      height: 12px;
     }
 
     .refresh-btn:hover {
-      background: #333;
-      color: #fff;
+      background: #1a1a1a;
+      color: #666;
     }
 
     .section-header {
-      padding: 0.75rem 1rem;
-      font-size: 0.7rem;
+      padding: 0.625rem 0.875rem;
+      font-size: 0.6rem;
       font-weight: 600;
       text-transform: uppercase;
-      color: #666;
-      letter-spacing: 0.05em;
-      border-top: 1px solid #222;
+      color: #444;
+      letter-spacing: 0.08em;
+      border-top: 1px solid #1e1e1e;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      background: #0d0d0d;
     }
 
     .sources-list {
-      padding: 0 0.5rem 0.5rem;
+      padding: 0.375rem;
     }
 
     .source-item {
@@ -424,22 +456,22 @@ export class FeedboardApp extends LitElement {
     }
 
     .clock-controls {
-      padding: 0 0.5rem 0.5rem;
+      padding: 0.375rem;
       display: flex;
       flex-direction: column;
-      gap: 0.35rem;
+      gap: 0.3rem;
     }
 
     .tz-select,
     .format-select,
     .label-input {
       width: 100%;
-      padding: 0.4rem 0.5rem;
-      background: #1a1a1a;
-      border: 1px solid #333;
-      border-radius: 4px;
-      color: #fff;
-      font-size: 0.75rem;
+      padding: 0.375rem 0.5rem;
+      background: #161616;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #ccc;
+      font-size: 0.7rem;
       box-sizing: border-box;
     }
 
@@ -451,42 +483,46 @@ export class FeedboardApp extends LitElement {
     .tz-select:hover,
     .format-select:hover,
     .label-input:hover {
-      border-color: #444;
+      border-color: #3a3a3a;
     }
 
     .tz-select:focus,
     .format-select:focus,
     .label-input:focus {
       outline: none;
-      border-color: #3b82f6;
+      border-color: #2563eb;
+      background: #1a1a1a;
     }
 
     .label-input::placeholder {
-      color: #555;
+      color: #444;
     }
 
     .add-clock-btn {
       width: 100%;
-      padding: 0.4rem;
+      padding: 0.375rem;
       background: #1e3a5f;
       border: 1px solid #2563eb;
-      border-radius: 4px;
-      color: #fff;
-      font-size: 0.75rem;
+      border-radius: 6px;
+      color: #60a5fa;
+      font-size: 0.7rem;
+      font-weight: 500;
       cursor: pointer;
       transition: all 0.15s;
       box-sizing: border-box;
     }
 
     .add-clock-btn:hover {
-      background: #2563eb;
+      background: #234876;
+      color: #93c5fd;
     }
 
     /* Keyboard shortcuts */
     .shortcuts {
-      padding: 0.5rem 0.75rem;
-      border-top: 1px solid #222;
+      padding: 0.5rem 0.625rem;
+      border-top: 1px solid #1e1e1e;
       margin-top: auto;
+      background: #0d0d0d;
     }
 
     .shortcuts-toggle {
@@ -495,28 +531,31 @@ export class FeedboardApp extends LitElement {
       gap: 0.5rem;
       background: none;
       border: none;
-      color: #555;
-      font-size: 0.65rem;
+      color: #444;
+      font-size: 0.6rem;
       cursor: pointer;
       padding: 0;
       width: 100%;
+      transition: color 0.15s;
     }
 
     .shortcuts-toggle:hover {
-      color: #888;
+      color: #666;
     }
 
     .shortcuts-toggle::before {
       content: '?';
-      width: 18px;
-      height: 18px;
-      background: #222;
+      width: 16px;
+      height: 16px;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 0.7rem;
-      color: #666;
+      font-size: 0.6rem;
+      font-weight: 600;
+      color: #555;
     }
 
     .shortcuts-list {
@@ -531,41 +570,42 @@ export class FeedboardApp extends LitElement {
     .shortcut-row {
       display: flex;
       justify-content: space-between;
-      font-size: 0.65rem;
-      color: #555;
-      padding: 0.15rem 0;
+      font-size: 0.6rem;
+      color: #444;
+      padding: 0.125rem 0;
     }
 
     .shortcut-key {
-      color: #888;
+      color: #666;
       font-family: 'SF Mono', Monaco, monospace;
-      font-size: 0.6rem;
-      background: #222;
-      padding: 0.1rem 0.3rem;
+      font-size: 0.55rem;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      padding: 0.1rem 0.35rem;
       border-radius: 3px;
     }
 
     /* Floating open button */
     .open-btn {
-      position: fixed;
-      top: 1rem;
-      left: 1rem;
-      width: 40px;
-      height: 40px;
-      background: rgba(0, 0, 0, 0.7);
-      border: 1px solid #333;
+      position: absolute;
+      top: 0.875rem;
+      left: 0.875rem;
+      width: 36px;
+      height: 36px;
+      background: rgba(10, 10, 10, 0.85);
+      border: 1px solid #2a2a2a;
       border-radius: 8px;
-      color: #fff;
+      color: #666;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.25rem;
       z-index: 50;
       opacity: 0;
       transform: scale(0.9);
-      transition: opacity 0.15s, transform 0.15s;
+      transition: all 0.15s;
       pointer-events: none;
+      backdrop-filter: blur(8px);
     }
 
     .open-btn.visible {
@@ -575,39 +615,41 @@ export class FeedboardApp extends LitElement {
     }
 
     .open-btn:hover {
-      background: rgba(37, 99, 235, 0.8);
-      border-color: #3b82f6;
+      background: rgba(30, 58, 95, 0.9);
+      border-color: #2563eb;
+      color: #60a5fa;
     }
 
     .open-btn svg {
-      width: 20px;
-      height: 20px;
+      width: 18px;
+      height: 18px;
     }
 
     /* Close button in sidebar */
     .close-btn {
-      width: 28px;
-      height: 28px;
+      width: 26px;
+      height: 26px;
       background: transparent;
-      border: 1px solid #333;
-      border-radius: 4px;
-      color: #888;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #555;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-left: auto;
       transition: all 0.15s;
+      flex-shrink: 0;
     }
 
     .close-btn:hover {
-      background: #333;
-      color: #fff;
+      background: #1a1a1a;
+      border-color: #3a3a3a;
+      color: #888;
     }
 
     .close-btn svg {
-      width: 16px;
-      height: 16px;
+      width: 14px;
+      height: 14px;
     }
 
     /* Fullscreen mode */
@@ -1416,20 +1458,20 @@ export class FeedboardApp extends LitElement {
 
   render() {
     return html`
-      <button
-        class="open-btn ${this.showOpenButton && !this.uiVisible ? 'visible' : ''}"
-        @click=${() => this.showUI()}
-        title="Open settings (S)"
-      >${icons.menu}</button>
+      ${this.uiVisible ? html`<feedboard-header page="app"></feedboard-header>` : ''}
 
-      <aside class="sidebar ${this.uiVisible ? 'visible' : ''}">
-        <div class="sidebar-header">
-          <div>
-            <h1>Feedboard</h1>
-            <div class="subtitle">MediaMTX Multiview</div>
+      <div class="app-body">
+        <button
+          class="open-btn ${this.showOpenButton && !this.uiVisible ? 'visible' : ''}"
+          @click=${() => this.showUI()}
+          title="Open settings (S)"
+        >${icons.menu}</button>
+
+        <aside class="sidebar ${this.uiVisible ? 'visible' : ''}">
+          <div class="sidebar-header">
+            <span class="sidebar-title">Layout</span>
+            <button class="close-btn" @click=${() => this.hideUI()} title="Close (Esc)">${icons.x}</button>
           </div>
-          <button class="close-btn" @click=${() => this.hideUI()} title="Close (Esc)">${icons.x}</button>
-        </div>
 
         <div class="controls">
           <div class="layout-buttons">
@@ -1572,7 +1614,7 @@ export class FeedboardApp extends LitElement {
           </div>
         </div>
 
-      </aside>
+        </aside>
 
       <main class="main-area">
         <div class="toolbar ${this.uiVisible ? 'visible' : ''}">
@@ -1612,7 +1654,8 @@ export class FeedboardApp extends LitElement {
             ${this.cells.map((cell, i) => this.renderCell(cell, i))}
           </feedboard-grid>
         </div>
-      </main>
+        </main>
+      </div>
     `
   }
 }

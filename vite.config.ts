@@ -9,6 +9,18 @@ export default defineConfig({
   },
   server: {
     allowedHosts: true,
+    proxy: {
+      '/auth': {
+        target: 'http://localhost:8091',
+        changeOrigin: true,
+        cookieDomainRewrite: '',
+      },
+      '/api': {
+        target: 'http://localhost:8091',
+        changeOrigin: true,
+        cookieDomainRewrite: '',
+      },
+    },
   },
   plugins: [
     {

@@ -2,6 +2,27 @@ import { svg } from 'lit'
 
 // Feather icons - stroke-based, use currentColor
 export const icons = {
+  // Feedboard logo - multiview grid with broadcast signal
+  logo: svg`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2" y="2" width="9" height="9" rx="1.5" fill="currentColor" opacity="0.15"/>
+    <rect x="13" y="2" width="9" height="9" rx="1.5"/>
+    <rect x="2" y="13" width="9" height="9" rx="1.5"/>
+    <rect x="13" y="13" width="9" height="9" rx="1.5"/>
+    <path d="M5.5 5L8 6.5 5.5 8z" fill="currentColor" stroke="none"/>
+  </svg>`,
+
+  // Alternate logo with signal waves
+  logoSignal: svg`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="1" y="4" width="14" height="10" rx="1.5"/>
+    <path d="M5 8l3 2-3 2z" fill="currentColor" stroke="none"/>
+    <path d="M18 7a3 3 0 0 1 0 4.5" opacity="0.5"/>
+    <path d="M20 5a6 6 0 0 1 0 9" opacity="0.7"/>
+    <path d="M22 3a9 9 0 0 1 0 13.5"/>
+    <line x1="5" y1="17" x2="11" y2="17"/>
+    <line x1="8" y1="17" x2="8" y2="20"/>
+  </svg>`,
+
+
   clock: svg`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
   </svg>`,

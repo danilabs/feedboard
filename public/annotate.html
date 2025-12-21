@@ -1,18 +1,14 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Annotate</title>
+  <title>Annotate - Feedboard</title>
+  <link rel="icon" href="./favicon.ico">
+  <link rel="stylesheet" href="./base.css">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <script type="module" src="./feedboard.js"></script>
   <style>
-    * { margin: 0; box-sizing: border-box; }
     html, body {
-      background: #000;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
       height: 100dvh; /* Dynamic viewport height for mobile */
-      overflow: hidden;
     }
 
     .video-area {
@@ -163,6 +159,8 @@
   </style>
 </head>
 <body>
+  <feedboard-header page="annotate"></feedboard-header>
+  <div class="page-content">
   <div class="video-area">
     <feedboard-player
       id="source"
@@ -213,7 +211,7 @@
   </div>
 
   <script type="module">
-    import { WhipClient, MediaMTXClient, getApiUrl, getWebrtcUrl, buildWhipUrl } from './feedboard.js'
+    import { WhipClient, MediaMTXClient, getApiUrl, getWebrtcUrl, buildWhipUrl, getStreamToken } from './feedboard.js'
 
     // Parse URL params
     const params = new URLSearchParams(window.location.search)
@@ -661,7 +659,8 @@
         const whipUrl = params.get('server')
           ? `${server}${publishTo}/whip`
           : buildWhipUrl(publishTo)
-        whipClient = new WhipClient(whipUrl)
+        const token = await getStreamToken()
+        whipClient = new WhipClient(whipUrl, token)
         await whipClient.publish(stream)
 
         isPublishing = true
@@ -686,5 +685,6 @@
       document.getElementById('status').textContent = 'Select a source stream'
     }
   </script>
+  </div>
 </body>
 </html>

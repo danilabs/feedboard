@@ -3,7 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js'
 import { WhipClient, getDevices, captureCamera, captureScreen } from '@/lib/whip-client'
 import { PPMMeter, dbfsToPercent, type PPMMeterData } from '@/lib/ppm-meter'
 import { icons } from '@/lib/icons'
-import { buildWhipUrl } from '@/lib/config'
+import { buildWhipUrl, getStreamToken } from '@/lib/config'
 
 type CaptureType = 'camera' | 'screen' | 'tab'
 type Status = 'idle' | 'previewing' | 'connecting' | 'live' | 'error'
@@ -550,7 +550,8 @@ export class FeedboardCapture extends LitElement {
     const url = this.getWhipUrl(this.publishPath)
 
     try {
-      this.whipClient = new WhipClient(url)
+      const token = await getStreamToken()
+      this.whipClient = new WhipClient(url, token)
       await this.whipClient.publish(this.stream)
       this.status = 'live'
     } catch (e) {

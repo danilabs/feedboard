@@ -1,8 +1,15 @@
 export class WhepClient {
   private pc: RTCPeerConnection | null = null
   private resourceUrl: string | null = null
+  private token: string | null = null
 
-  constructor(private url: string) {}
+  constructor(private url: string, token?: string | null) {
+    this.token = token ?? null
+  }
+
+  setToken(token: string | null): void {
+    this.token = token
+  }
 
   async connect(): Promise<MediaStream> {
     this.pc = new RTCPeerConnection({
@@ -20,8 +27,15 @@ export class WhepClient {
     // Wait for ICE gathering
     await this.waitForIceGathering()
 
+    // Build URL with optional JWT token
+    let whepUrl = this.url
+    if (this.token) {
+      const separator = whepUrl.includes('?') ? '&' : '?'
+      whepUrl = `${whepUrl}${separator}jwt=${encodeURIComponent(this.token)}`
+    }
+
     // Send offer to WHEP endpoint
-    const response = await fetch(this.url, {
+    const response = await fetch(whepUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/sdp',

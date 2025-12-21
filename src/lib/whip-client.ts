@@ -4,8 +4,15 @@ export class WhipClient {
   private pc: RTCPeerConnection | null = null
   private resourceUrl: string | null = null
   private stream: MediaStream | null = null
+  private token: string | null = null
 
-  constructor(private url: string) {}
+  constructor(private url: string, token?: string | null) {
+    this.token = token ?? null
+  }
+
+  setToken(token: string | null): void {
+    this.token = token
+  }
 
   async publish(stream: MediaStream): Promise<void> {
     this.stream = stream
@@ -26,8 +33,15 @@ export class WhipClient {
     // Wait for ICE gathering
     await this.waitForIceGathering()
 
+    // Build URL with optional JWT token
+    let whipUrl = this.url
+    if (this.token) {
+      const separator = whipUrl.includes('?') ? '&' : '?'
+      whipUrl = `${whipUrl}${separator}jwt=${encodeURIComponent(this.token)}`
+    }
+
     // Send offer to WHIP endpoint
-    const response = await fetch(this.url, {
+    const response = await fetch(whipUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/sdp',

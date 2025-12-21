@@ -1,0 +1,123 @@
+package main
+
+import (
+	"flag"
+	"fmt"
+	"log"
+	"net/http"
+
+	"github.com/gorilla/mux"
+)
+
+// Config holds server configuration
+type Config struct {
+	Port          int
+	DBPath        string
+	JWTSecret     string
+	SecureCookies bool
+}
+
+func main() {
+	// Parse flags
+	config := &Config{}
+	flag.IntVar(&config.Port, "port", 8091, "HTTP server port")
+	flag.StringVar(&config.DBPath, "db", "data/feedboard.db", "SQLite database path")
+	flag.StringVar(&config.JWTSecret, "jwt-secret", "", "JWT signing secret (auto-generated if empty)")
+	flag.BoolVar(&config.SecureCookies, "secure-cookies", false, "Set secure flag on cookies (enable for HTTPS)")
+	flag.Parse()
+
+	// Generate JWT secret if not provided
+	if config.JWTSecret == "" {
+		config.JWTSecret = generateSecureToken(32)
+		log.Printf("Generated JWT secret (will change on restart)")
+	}
+
+	// Initialize database
+	db, err := InitDB(config.DBPath)
+	if err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer db.Close()
+
+	// Create default admin if no users exist
+	if password, err := db.CreateDefaultAdmin(); err != nil {
+		log.Fatalf("Failed to create default admin: %v", err)
+	} else if password != "" {
+		fmt.Println("=====================================")
+		fmt.Println("  Default admin account created")
+		fmt.Println("=====================================")
+		fmt.Println("  Username: admin")
+		fmt.Printf("  Password: %s\n", password)
+		fmt.Println("=====================================")
+		fmt.Println("  Change this password after login!")
+		fmt.Println("=====================================")
+	}
+
+	// Initialize handlers
+	authHandler := NewAuthHandler(db, config.JWTSecret, config.SecureCookies)
+	hookHandler := NewHookHandler(db, authHandler)
+	apiHandler := NewAPIHandler(db)
+
+	// Set up router
+	r := mux.NewRouter()
+
+	// Auth endpoints (public)
+	r.HandleFunc("/auth/login", authHandler.HandleLogin).Methods("POST")
+	r.HandleFunc("/auth/logout", authHandler.HandleLogout).Methods("POST")
+	r.HandleFunc("/auth/hook", hookHandler.HandleAuth).Methods("POST")
+
+	// Auth endpoints (authenticated)
+	r.Handle("/auth/me", authHandler.RequireAuth(http.HandlerFunc(authHandler.HandleMe))).Methods("GET")
+	r.Handle("/auth/token", authHandler.RequireAuth(http.HandlerFunc(authHandler.HandleToken))).Methods("GET")
+	r.Handle("/auth/password", authHandler.RequireAuth(http.HandlerFunc(authHandler.HandleChangePassword))).Methods("POST")
+
+	// API endpoints (authenticated)
+	api := r.PathPrefix("/api").Subrouter()
+
+	// Current user
+	api.Handle("/me", authHandler.RequireAuth(http.HandlerFunc(authHandler.HandleMe))).Methods("GET")
+
+	// Stream keys (authenticated users can manage their own)
+	api.Handle("/keys", authHandler.RequireAuth(http.HandlerFunc(apiHandler.HandleListStreamKeys))).Methods("GET")
+	api.Handle("/keys", authHandler.RequireAuth(http.HandlerFunc(apiHandler.HandleCreateStreamKey))).Methods("POST")
+	api.Handle("/keys/{id:[0-9]+}", authHandler.RequireAuth(http.HandlerFunc(apiHandler.HandleDeleteStreamKey))).Methods("DELETE")
+
+	// Admin-only endpoints
+	api.Handle("/users", authHandler.RequireAdmin(http.HandlerFunc(apiHandler.HandleListUsers))).Methods("GET")
+	api.Handle("/users", authHandler.RequireAdmin(http.HandlerFunc(apiHandler.HandleCreateUser))).Methods("POST")
+	api.Handle("/users/{id:[0-9]+}", authHandler.RequireAdmin(http.HandlerFunc(apiHandler.HandleGetUser))).Methods("GET")
+	api.Handle("/users/{id:[0-9]+}", authHandler.RequireAdmin(http.HandlerFunc(apiHandler.HandleUpdateUser))).Methods("PUT")
+	api.Handle("/users/{id:[0-9]+}", authHandler.RequireAdmin(http.HandlerFunc(apiHandler.HandleDeleteUser))).Methods("DELETE")
+	api.Handle("/permissions", authHandler.RequireAdmin(http.HandlerFunc(apiHandler.HandleListPermissions))).Methods("GET")
+	api.Handle("/permissions", authHandler.RequireAdmin(http.HandlerFunc(apiHandler.HandleSetPermission))).Methods("POST")
+	api.Handle("/permissions/{id:[0-9]+}", authHandler.RequireAdmin(http.HandlerFunc(apiHandler.HandleDeletePermission))).Methods("DELETE")
+
+	// CORS middleware
+	handler := corsMiddleware(r)
+
+	// Start server
+	addr := fmt.Sprintf(":%d", config.Port)
+	log.Printf("Auth API listening on http://localhost%s", addr)
+	log.Printf("MediaMTX auth hook: http://localhost%s/auth/hook", addr)
+	log.Fatal(http.ListenAndServe(addr, handler))
+}
+
+// corsMiddleware adds CORS headers for development
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		}
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}

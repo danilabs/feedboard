@@ -4,7 +4,7 @@ import { WhepClient } from '@/lib/whep-client'
 import { HlsPlayer } from '@/lib/hls-player'
 import { PPMMeter, dbfsToPercent, type PPMMeterData } from '@/lib/ppm-meter'
 import { icons } from '@/lib/icons'
-import { getWebrtcUrl, getHlsUrl, buildWhepUrl, buildHlsUrl, buildThumbnailUrl } from '@/lib/config'
+import { getWebrtcUrl, getHlsUrl, buildWhepUrl, buildHlsUrl, buildThumbnailUrl, getStreamToken } from '@/lib/config'
 
 type Protocol = 'auto' | 'whep' | 'hls'
 type FitMode = 'contain' | 'cover' | 'fill'
@@ -711,7 +711,9 @@ export class FeedboardPlayer extends LitElement {
       }
 
       if (useProtocol === 'whep' && urls.whepUrl) {
-        this.whepClient = new WhepClient(urls.whepUrl)
+        // Get auth token for stream access (if authenticated)
+        const token = await getStreamToken()
+        this.whepClient = new WhepClient(urls.whepUrl, token)
         const stream = await this.whepClient.connect()
         this.videoElement.srcObject = stream
         try {
