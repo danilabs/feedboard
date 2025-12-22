@@ -28,6 +28,7 @@ export { MediaMTXClient } from './lib/mediamtx-api'
 export { WhepClient } from './lib/whep-client'
 export { WhipClient, getDevices, captureCamera, captureScreen } from './lib/whip-client'
 export { HlsPlayer } from './lib/hls-player'
+export { setStreamDragData, setSlotDragData, parseDragData, type SlotDragData } from './lib/drag-utils'
 
 // Export config functions
 export {

@@ -1,5 +1,6 @@
 import { LitElement, html, css } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
+import { setSlotDragData, parseDragData } from '@/lib/drag-utils'
 
 export interface SlotConfig {
   type: 'stream' | 'clock' | 'slate' | 'capture' | 'empty'
@@ -68,6 +69,20 @@ export class FeedboardSlot extends LitElement {
       box-shadow: inset 0 0 20px rgba(34, 197, 94, 0.2);
     }
 
+    /* Draggable cursor for non-empty slots */
+    .slot:not(.empty) {
+      cursor: grab;
+    }
+
+    .slot:not(.empty):active {
+      cursor: grabbing;
+    }
+
+    /* Dragging state */
+    .slot.dragging {
+      opacity: 0.5;
+    }
+
     /* Content fills the slot */
     .content {
       width: 100%;
@@ -103,12 +118,28 @@ export class FeedboardSlot extends LitElement {
   @property({ type: Boolean, attribute: 'show-vu' }) showVu = true
 
   @state() private dragOver = false
+  @state() private dragging = false
+
+  private handleDragStart = (e: DragEvent) => {
+    if (this.config.type === 'empty') {
+      e.preventDefault()
+      return
+    }
+
+    this.dragging = true
+    setSlotDragData(e, this.config, this.index)
+  }
+
+  private handleDragEnd = () => {
+    this.dragging = false
+    this.dragOver = false
+  }
 
   private handleDragOver = (e: DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     if (e.dataTransfer) {
-      e.dataTransfer.dropEffect = 'copy'
+      e.dataTransfer.dropEffect = 'move'
     }
     this.dragOver = true
   }
@@ -124,11 +155,27 @@ export class FeedboardSlot extends LitElement {
     e.stopPropagation()
     this.dragOver = false
 
-    const streamPath = e.dataTransfer?.getData('text/plain')
-    if (streamPath) {
+    const dragData = parseDragData(e)
+    if (!dragData) return
+
+    if (dragData.type === 'slot') {
+      // From another slot
+      this.dispatchEvent(
+        new CustomEvent('slot-move', {
+          detail: {
+            config: dragData.data.config,
+            sourceIndex: dragData.data.sourceIndex,
+            targetIndex: this.index,
+          },
+          bubbles: true,
+          composed: true,
+        })
+      )
+    } else {
+      // Stream path from sidebar
       this.dispatchEvent(
         new CustomEvent('slot-drop', {
-          detail: { path: streamPath, index: this.index },
+          detail: { path: dragData.path, index: this.index },
           bubbles: true,
           composed: true,
         })
@@ -224,6 +271,7 @@ export class FeedboardSlot extends LitElement {
       isEmpty ? 'empty' : '',
       this.selected ? 'selected' : '',
       this.dragOver ? 'dragover' : '',
+      this.dragging ? 'dragging' : '',
     ]
       .filter(Boolean)
       .join(' ')
@@ -231,6 +279,9 @@ export class FeedboardSlot extends LitElement {
     return html`
       <div
         class=${classes}
+        draggable=${isEmpty ? 'false' : 'true'}
+        @dragstart=${this.handleDragStart}
+        @dragend=${this.handleDragEnd}
         @click=${this.handleClick}
         @dblclick=${this.handleDblClick}
         @dragover=${this.handleDragOver}

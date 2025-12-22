@@ -9,6 +9,7 @@ import {
   getThumbnailsUrl,
   buildThumbnailUrl,
 } from '@/lib/config'
+import { setStreamDragData } from '@/lib/drag-utils'
 import { getThumbnailerClient, type ThumbnailerClient } from '@/lib/thumbnailer-client'
 import { layouts, getLayout, type LayoutTemplate } from '@/lib/layouts'
 import './feedboard-header'
@@ -206,6 +207,9 @@ export class FeedboardApp extends LitElement {
       width: 100%;
       height: 100%;
       object-fit: cover;
+      -webkit-user-drag: none;
+      user-drag: none;
+      pointer-events: none;
     }
 
     .stream-thumb-placeholder {
@@ -1283,6 +1287,27 @@ export class FeedboardApp extends LitElement {
     this.toggleCellFullscreen(e.detail.index)
   }
 
+  private handleSlotMove = (e: CustomEvent<{ config: any; sourceIndex: number; targetIndex: number }>) => {
+    const { config, sourceIndex, targetIndex } = e.detail
+
+    // If sourceIndex is -1, it's from another window - just place the config
+    if (sourceIndex === -1 || sourceIndex === undefined) {
+      const newCells = [...this.cells]
+      newCells[targetIndex] = config
+      this.cells = newCells
+      this.saveState()
+      return
+    }
+
+    // Same window - swap the cells
+    const newCells = [...this.cells]
+    const targetConfig = newCells[targetIndex]
+    newCells[targetIndex] = config
+    newCells[sourceIndex] = targetConfig
+    this.cells = newCells
+    this.saveState()
+  }
+
   private handleTimezoneChange(value: string) {
     this.selectedTimezone = value
     if (value === '') {
@@ -1377,6 +1402,7 @@ export class FeedboardApp extends LitElement {
         class="layout-grid"
         style=${containerStyle}
         @slot-drop=${this.handleSlotDrop}
+        @slot-move=${this.handleSlotMove}
         @slot-select=${this.handleSlotSelect}
         @slot-fullscreen=${this.handleSlotFullscreen}
       >
@@ -1501,10 +1527,7 @@ export class FeedboardApp extends LitElement {
               const liveThumb = this.thumbnails.get(stream.name)
               const showThumbnails = this.thumbnailerConnected && liveThumb
               const handleDragStart = (e: DragEvent) => {
-                if (e.dataTransfer) {
-                  e.dataTransfer.setData('text/plain', stream.name)
-                  e.dataTransfer.effectAllowed = 'copy'
-                }
+                setStreamDragData(e, stream.name)
               }
               return showThumbnails ? html`
               <div
