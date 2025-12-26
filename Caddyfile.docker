@@ -37,7 +37,13 @@
 		reverse_proxy mediamtx:8888
 	}
 
-	# Static files
+	# Static examples (no SPA fallback)
+	handle /examples/* {
+		root * /srv
+		file_server
+	}
+
+	# Static files with SPA fallback
 	handle {
 		root * /srv
 		try_files {path} /index.html
