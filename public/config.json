@@ -2,7 +2,9 @@
   "api": "",
   "webrtc": "",
   "hls": "",
-  "thumbnails": "",
+  "thumbnails": {
+    "enabled": true
+  },
   "auth": {
     "enabled": true
   }

@@ -16,17 +16,21 @@ export interface RuntimeConfig {
   api: string
   webrtc: string
   hls: string
-  thumbnails?: string
+  thumbnails?: {
+    enabled: boolean
+    url?: string  // resolved URL (empty = default port, "/" = relative, full URL = as-is)
+  }
   auth?: {
     enabled: boolean
   }
 }
 
-// MediaMTX default ports
-const MEDIAMTX_PORTS = {
-  api: 9997,
-  webrtc: 8889,
-  hls: 8888,
+// Default ports
+const DEFAULT_PORTS = {
+  api: 9997,      // MediaMTX API
+  webrtc: 8889,   // MediaMTX WebRTC
+  hls: 8888,      // MediaMTX HLS
+  thumbs: 8090,   // Thumbnailer
 }
 
 let loadedConfig: RuntimeConfig | null = null
@@ -34,13 +38,13 @@ let configPromise: Promise<RuntimeConfig> | null = null
 
 /**
  * Resolve a config value to a full URL.
- * - Empty string → default MediaMTX port on same hostname
+ * - Empty string → default port on same hostname
  * - "/" → empty string (relative paths)
  * - Full URL → use as-is
  */
 function resolveConfigValue(value: string | undefined, defaultPort: number): string {
   if (value === undefined || value === '') {
-    // Empty = use default MediaMTX port
+    // Empty = use default port
     const { protocol, hostname } = window.location
     return `${protocol}//${hostname}:${defaultPort}`
   }
@@ -53,14 +57,29 @@ function resolveConfigValue(value: string | undefined, defaultPort: number): str
 }
 
 /**
- * Build default config using current hostname with MediaMTX default ports.
+ * Resolve thumbnails config to enabled flag + resolved URL.
+ */
+function resolveThumbnailsConfig(
+  config: { enabled?: boolean; url?: string } | undefined
+): { enabled: boolean; url?: string } | undefined {
+  if (!config?.enabled) {
+    return undefined
+  }
+  return {
+    enabled: true,
+    url: resolveConfigValue(config.url, DEFAULT_PORTS.thumbs),
+  }
+}
+
+/**
+ * Build default config using current hostname with default ports.
  */
 function buildDefaultConfig(): RuntimeConfig {
   const { protocol, hostname } = window.location
   return {
-    api: `${protocol}//${hostname}:${MEDIAMTX_PORTS.api}`,
-    webrtc: `${protocol}//${hostname}:${MEDIAMTX_PORTS.webrtc}`,
-    hls: `${protocol}//${hostname}:${MEDIAMTX_PORTS.hls}`,
+    api: `${protocol}//${hostname}:${DEFAULT_PORTS.api}`,
+    webrtc: `${protocol}//${hostname}:${DEFAULT_PORTS.webrtc}`,
+    hls: `${protocol}//${hostname}:${DEFAULT_PORTS.hls}`,
   }
 }
 
@@ -105,10 +124,10 @@ export async function loadConfig(): Promise<RuntimeConfig> {
     // 1. Check window.FEEDBOARD_CONFIG (for standalone examples)
     if (window.FEEDBOARD_CONFIG) {
       loadedConfig = {
-        api: resolveConfigValue(window.FEEDBOARD_CONFIG.api, MEDIAMTX_PORTS.api),
-        webrtc: resolveConfigValue(window.FEEDBOARD_CONFIG.webrtc, MEDIAMTX_PORTS.webrtc),
-        hls: resolveConfigValue(window.FEEDBOARD_CONFIG.hls, MEDIAMTX_PORTS.hls),
-        thumbnails: window.FEEDBOARD_CONFIG.thumbnails,
+        api: resolveConfigValue(window.FEEDBOARD_CONFIG.api, DEFAULT_PORTS.api),
+        webrtc: resolveConfigValue(window.FEEDBOARD_CONFIG.webrtc, DEFAULT_PORTS.webrtc),
+        hls: resolveConfigValue(window.FEEDBOARD_CONFIG.hls, DEFAULT_PORTS.hls),
+        thumbnails: resolveThumbnailsConfig(window.FEEDBOARD_CONFIG.thumbnails as any),
         auth: window.FEEDBOARD_CONFIG.auth
           ? { enabled: true }
           : undefined,
@@ -121,10 +140,10 @@ export async function loadConfig(): Promise<RuntimeConfig> {
     if (fileConfig) {
       // Resolve empty strings to default ports, "/" to relative paths
       loadedConfig = {
-        api: resolveConfigValue(fileConfig.api, MEDIAMTX_PORTS.api),
-        webrtc: resolveConfigValue(fileConfig.webrtc, MEDIAMTX_PORTS.webrtc),
-        hls: resolveConfigValue(fileConfig.hls, MEDIAMTX_PORTS.hls),
-        thumbnails: fileConfig.thumbnails,
+        api: resolveConfigValue(fileConfig.api, DEFAULT_PORTS.api),
+        webrtc: resolveConfigValue(fileConfig.webrtc, DEFAULT_PORTS.webrtc),
+        hls: resolveConfigValue(fileConfig.hls, DEFAULT_PORTS.hls),
+        thumbnails: resolveThumbnailsConfig(fileConfig.thumbnails as any),
         auth: fileConfig.auth,
       }
       return loadedConfig

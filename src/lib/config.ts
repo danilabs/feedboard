@@ -37,7 +37,7 @@ declare global {
       api?: string
       webrtc?: string
       hls?: string
-      thumbnails?: string
+      thumbnails?: { enabled?: boolean; url?: string }
       auth?: string | { enabled: boolean }  // Auth config
     }
     FEEDBOARD_USER?: FeedboardUser | null  // Injected by auth proxy when logged in
@@ -64,7 +64,7 @@ export async function initConfig(): Promise<FeedboardConfig> {
     api: runtime.api,
     webrtc: runtime.webrtc,
     hls: runtime.hls,
-    thumbnails: runtime.thumbnails,
+    thumbnails: runtime.thumbnails?.url,
   }
   configInitialized = true
   return cachedConfig
@@ -110,11 +110,12 @@ export function getConfig(): FeedboardConfig {
   // Sync fallback for components that call before init
   // Check for user override
   if (window.FEEDBOARD_CONFIG) {
+    const thumbs = window.FEEDBOARD_CONFIG.thumbnails
     cachedConfig = {
       api: resolveValue(window.FEEDBOARD_CONFIG.api, MEDIAMTX_PORTS.api),
       webrtc: resolveValue(window.FEEDBOARD_CONFIG.webrtc, MEDIAMTX_PORTS.webrtc),
       hls: resolveValue(window.FEEDBOARD_CONFIG.hls, MEDIAMTX_PORTS.hls),
-      thumbnails: window.FEEDBOARD_CONFIG.thumbnails,
+      thumbnails: thumbs?.enabled ? resolveValue(thumbs.url, 8090) : undefined,
     }
     return cachedConfig
   }
