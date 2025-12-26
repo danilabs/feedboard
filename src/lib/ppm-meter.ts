@@ -43,6 +43,14 @@ export class PPMMeter {
     // Create audio context
     this.audioContext = new AudioContext()
 
+    // Check if AudioWorklet is available (requires secure context: HTTPS or localhost)
+    if (!this.audioContext.audioWorklet) {
+      console.warn('[PPMMeter] AudioWorklet not available - requires HTTPS or localhost')
+      this.audioContext.close()
+      this.audioContext = null
+      return
+    }
+
     // Create worklet URL once
     if (!workletUrl) {
       workletUrl = getPPMWorkletUrl()

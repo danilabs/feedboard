@@ -1,36 +1,74 @@
-# Feedboard development Caddyfile (Docker)
-# Proxies Vite dev server + MediaMTX through a single port
+# Feedboard Development Caddyfile
+#
+# Proxies Vite + MediaMTX through single HTTPS port
+#
+# Environment variables:
+#   MTX_HOST         - mediamtx (default) or host.docker.internal
+#   VITE_HOST        - vite (default)
+#   THUMBNAILER_HOST - thumbnailer (default)
+#   AUTH_HOST        - authproxy (default)
 
-{
-	local_certs
-}
+:443, localhost {
+	tls internal
 
-:443 {
+	# Auth proxy (when available)
+	handle /auth/* {
+		reverse_proxy {$AUTH_HOST:authproxy}:8091
+	}
+	handle /api/* {
+		reverse_proxy {$AUTH_HOST:authproxy}:8091
+	}
+
+	# Vite source files (must be before HLS to avoid .ts confusion)
+	handle /src/* {
+		reverse_proxy {$VITE_HOST:vite}:5173
+	}
+	handle /@* {
+		reverse_proxy {$VITE_HOST:vite}:5173
+	}
+	handle /node_modules/* {
+		reverse_proxy {$VITE_HOST:vite}:5173
+	}
+
 	# MediaMTX API
 	handle /v3/* {
-		reverse_proxy mediamtx:9997
+		reverse_proxy {$MTX_HOST:mediamtx}:9997
 	}
 
-	# MediaMTX WebRTC - WHIP endpoints (publish)
+	# Thumbnailer
+	handle /thumbs/ws {
+		reverse_proxy {$THUMBNAILER_HOST:thumbnailer}:8090 {
+			header_up Connection {>Connection}
+			header_up Upgrade {>Upgrade}
+		}
+	}
+	handle_path /thumbs/* {
+		reverse_proxy {$THUMBNAILER_HOST:thumbnailer}:8090
+	}
+
+	# MediaMTX WebRTC - WHIP/WHEP
 	@whip path */whip
 	handle @whip {
-		reverse_proxy mediamtx:8889
+		reverse_proxy {$MTX_HOST:mediamtx}:8889
 	}
-
-	# MediaMTX WebRTC - WHEP endpoints (playback)
 	@whep path */whep
 	handle @whep {
-		reverse_proxy mediamtx:8889
+		reverse_proxy {$MTX_HOST:mediamtx}:8889
 	}
 
 	# MediaMTX HLS
 	@hls path_regexp hls ^/.+\.(m3u8|ts)$
 	handle @hls {
-		reverse_proxy mediamtx:8888
+		reverse_proxy {$MTX_HOST:mediamtx}:8888
 	}
 
-	# Vite dev server (with HMR websocket)
+	# Static examples (bypass SPA routing)
+	handle /examples/* {
+		reverse_proxy {$VITE_HOST:vite}:5173
+	}
+
+	# Vite dev server (default) - handles SPA routes
 	handle {
-		reverse_proxy vite:5173
+		reverse_proxy {$VITE_HOST:vite}:5173
 	}
 }

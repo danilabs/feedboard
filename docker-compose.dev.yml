@@ -1,17 +1,30 @@
-# Development stack
-# Usage: docker compose -f docker-compose.dev.yml up
+# Feedboard Development Stack
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up
+#
+# With thumbnailer:
+#   docker compose -f docker-compose.dev.yml --profile thumbs up
+#
+# Using local MediaMTX instead of container:
+#   MTX_HOST=host.docker.internal docker compose -f docker-compose.dev.yml up
+#
+# Access: https://localhost
 
 services:
   caddy:
     image: caddy:2-alpine
     ports:
       - "443:443"
+    environment:
+      - MTX_HOST=${MTX_HOST:-mediamtx}
+      - VITE_HOST=vite
+      - THUMBNAILER_HOST=${THUMBNAILER_HOST:-thumbnailer}
     volumes:
       - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
     depends_on:
       - vite
-#      - mediamtx
     networks:
       - feedboard-net
 
@@ -27,21 +40,32 @@ services:
     networks:
       - feedboard-net
 
-#  mediamtx:
-#    image: bluenviron/mediamtx:latest
-#    ports:
-#      - "8554:8554"   # RTSP
-#      - "1935:1935"   # RTMP
-#    expose:
-#      - "8888"        # HLS
-#      - "8889"        # WebRTC
-#      - "9997"        # API
-#    environment:
-#      - MTX_WEBRTCADDRESS=:8889
-#      - MTX_API=yes
-#      - MTX_APIADDRESS=:9997
-#    networks:
-#      - feedboard-net
+  mediamtx:
+    image: bluenviron/mediamtx:latest-ffmpeg
+    ports:
+      - "8554:8554"   # RTSP
+      - "1935:1935"   # RTMP
+    expose:
+      - "8888"        # HLS
+      - "8889"        # WebRTC
+      - "9997"        # API
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+    networks:
+      - feedboard-net
+
+  thumbnailer:
+    build: ./thumbnailer
+    profiles: [thumbs]
+    expose:
+      - "8090"
+    command:
+      - "-mediamtx-api=http://${MTX_HOST:-mediamtx}:9997"
+      - "-mediamtx-rtsp=rtsp://${MTX_HOST:-mediamtx}:8554"
+    depends_on:
+      - mediamtx
+    networks:
+      - feedboard-net
 
 networks:
   feedboard-net:

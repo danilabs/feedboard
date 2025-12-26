@@ -1,10 +1,13 @@
 /**
  * Centralized configuration for MediaMTX server URLs.
  *
- * Override by defining window.FEEDBOARD_CONFIG before loading feedboard.js:
+ * Configuration priority:
+ * 1. window.FEEDBOARD_CONFIG (for standalone examples)
+ * 2. /config.json file (for production deployments)
+ * 3. Relative paths (for reverse proxy setups)
  *
  * @example
- * // Custom ports
+ * // Custom ports via window.FEEDBOARD_CONFIG
  * window.FEEDBOARD_CONFIG = {
  *   api: 'http://localhost:9000',
  *   webrtc: 'http://localhost:8000',
@@ -12,13 +15,15 @@
  * }
  *
  * @example
- * // Behind reverse proxy (relative URLs)
- * window.FEEDBOARD_CONFIG = {
- *   api: '',
- *   webrtc: '',
- *   hls: '',
+ * // Or edit config.json before serving:
+ * {
+ *   "api": "http://mediamtx.local:9997",
+ *   "webrtc": "http://mediamtx.local:8889",
+ *   "hls": "http://mediamtx.local:8888"
  * }
  */
+
+import { loadConfig, getLoadedConfig, isAuthEnabled as checkAuthEnabled } from './config-loader'
 
 export interface FeedboardUser {
   id: number
@@ -33,18 +38,10 @@ declare global {
       webrtc?: string
       hls?: string
       thumbnails?: string
-      auth?: string  // Auth API base URL (if auth is enabled)
+      auth?: string | { enabled: boolean }  // Auth config
     }
     FEEDBOARD_USER?: FeedboardUser | null  // Injected by auth proxy when logged in
   }
-}
-
-// MediaMTX default ports
-const DEFAULTS = {
-  apiPort: 9997,
-  webrtcPort: 8889,
-  hlsPort: 8888,
-  thumbnailsPort: 8090,
 }
 
 export interface FeedboardConfig {
@@ -55,41 +52,79 @@ export interface FeedboardConfig {
 }
 
 let cachedConfig: FeedboardConfig | null = null
+let configInitialized = false
+
+/**
+ * Initialize configuration asynchronously.
+ * Call this once at app startup before using getConfig().
+ */
+export async function initConfig(): Promise<FeedboardConfig> {
+  const runtime = await loadConfig()
+  cachedConfig = {
+    api: runtime.api,
+    webrtc: runtime.webrtc,
+    hls: runtime.hls,
+    thumbnails: runtime.thumbnails,
+  }
+  configInitialized = true
+  return cachedConfig
+}
+
+// MediaMTX default ports
+const MEDIAMTX_PORTS = {
+  api: 9997,
+  webrtc: 8889,
+  hls: 8888,
+}
+
+/**
+ * Resolve a config value to a full URL.
+ * - Empty string → default MediaMTX port on same hostname
+ * - "/" → empty string (relative paths)
+ * - Full URL → use as-is
+ */
+function resolveValue(value: string | undefined, defaultPort: number): string {
+  if (value === undefined || value === '') {
+    const { protocol, hostname } = window.location
+    return `${protocol}//${hostname}:${defaultPort}`
+  }
+  if (value === '/') {
+    return ''
+  }
+  return value
+}
 
 /**
  * Get the current configuration.
- * Checks for window.FEEDBOARD_CONFIG override, then applies smart defaults.
+ * Returns cached config if initialized, otherwise falls back to sync detection.
  *
- * Default behavior:
- * - Uses current hostname with MediaMTX default ports (8889, 8888, 9997)
- * - Works with: python -m http.server + default MediaMTX config
- *
- * For proxy setups (Caddy, nginx), set window.FEEDBOARD_CONFIG:
- * - { api: '', webrtc: '', hls: '' } for relative URLs (same origin)
+ * For SPA usage, call initConfig() first.
+ * For standalone examples, this works immediately with window.FEEDBOARD_CONFIG.
  */
 export function getConfig(): FeedboardConfig {
+  // Return initialized config
   if (cachedConfig) {
     return cachedConfig
   }
 
+  // Sync fallback for components that call before init
   // Check for user override
   if (window.FEEDBOARD_CONFIG) {
     cachedConfig = {
-      api: window.FEEDBOARD_CONFIG.api ?? '',
-      webrtc: window.FEEDBOARD_CONFIG.webrtc ?? '',
-      hls: window.FEEDBOARD_CONFIG.hls ?? '',
-      thumbnails: window.FEEDBOARD_CONFIG.thumbnails,  // Optional, undefined if not set
+      api: resolveValue(window.FEEDBOARD_CONFIG.api, MEDIAMTX_PORTS.api),
+      webrtc: resolveValue(window.FEEDBOARD_CONFIG.webrtc, MEDIAMTX_PORTS.webrtc),
+      hls: resolveValue(window.FEEDBOARD_CONFIG.hls, MEDIAMTX_PORTS.hls),
+      thumbnails: window.FEEDBOARD_CONFIG.thumbnails,
     }
     return cachedConfig
   }
 
-  // Default: use current hostname with MediaMTX default ports
+  // Default: use MediaMTX default ports on same hostname
   const { protocol, hostname } = window.location
   cachedConfig = {
-    api: `${protocol}//${hostname}:${DEFAULTS.apiPort}`,
-    webrtc: `${protocol}//${hostname}:${DEFAULTS.webrtcPort}`,
-    hls: `${protocol}//${hostname}:${DEFAULTS.hlsPort}`,
-    thumbnails: `${protocol}//${hostname}:${DEFAULTS.thumbnailsPort}`,
+    api: `${protocol}//${hostname}:${MEDIAMTX_PORTS.api}`,
+    webrtc: `${protocol}//${hostname}:${MEDIAMTX_PORTS.webrtc}`,
+    hls: `${protocol}//${hostname}:${MEDIAMTX_PORTS.hls}`,
   }
   return cachedConfig
 }
@@ -165,6 +200,11 @@ export function buildThumbnailUrl(path: string): string | undefined {
  * Check if auth is enabled
  */
 export function isAuthEnabled(): boolean {
+  // Check loaded config first (from config.json)
+  if (checkAuthEnabled()) {
+    return true
+  }
+  // Fall back to window config
   return !!window.FEEDBOARD_CONFIG?.auth
 }
 
@@ -214,7 +254,7 @@ export async function logout(): Promise<void> {
     credentials: 'same-origin',
   })
   cachedStreamToken = null
-  window.location.href = '/login.html'
+  window.location.href = '/login'
 }
 
 // Stream token cache

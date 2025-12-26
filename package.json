@@ -5,12 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && npm run build:lib && npm run build:config",
+    "build:lib": "vite build --mode library",
+    "build:config": "node scripts/generate-config.js",
     "preview": "vite preview"
   },
   "dependencies": {
-    "lit": "^3.2.0",
-    "hls.js": "^1.6.2"
+    "@lit-labs/router": "^0.1.4",
+    "hls.js": "^1.6.2",
+    "lit": "^3.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

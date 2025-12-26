@@ -1,0 +1,9 @@
+{
+  "api": "",
+  "webrtc": "",
+  "hls": "",
+  "thumbnails": "",
+  "auth": {
+    "enabled": true
+  }
+}

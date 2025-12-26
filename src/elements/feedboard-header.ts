@@ -168,7 +168,7 @@ export class FeedboardHeader extends LitElement {
 
   private async logout() {
     await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' })
-    window.location.href = '/login.html'
+    window.location.href = '/login'
   }
 
   render() {
@@ -189,9 +189,9 @@ export class FeedboardHeader extends LitElement {
           ${!this.hideNav ? html`
             <nav>
               <a href="/" class=${this.page === 'app' ? 'active' : ''}>Multiview</a>
-              <a href="/annotate.html" class=${this.page === 'annotate' ? 'active' : ''}>Annotate</a>
+              <a href="/annotate" class=${this.page === 'annotate' ? 'active' : ''}>Annotate</a>
               ${this.user?.role === 'admin' ? html`
-                <a href="/admin.html" class=${this.page === 'admin' ? 'active' : ''}>Admin</a>
+                <a href="/admin" class=${this.page === 'admin' ? 'active' : ''}>Admin</a>
               ` : ''}
             </nav>
           ` : ''}

@@ -6,6 +6,14 @@
 {$DOMAIN} {
 	tls {$TLS_MODE}
 
+	# Auth proxy (optional - enable with --profile auth)
+	handle /auth/* {
+		reverse_proxy authproxy:8091
+	}
+	handle /api/* {
+		reverse_proxy authproxy:8091
+	}
+
 	# MediaMTX API
 	handle /v3/* {
 		reverse_proxy mediamtx:9997
