@@ -145,6 +145,11 @@ export class FeedboardApp extends LitElement {
       justify-content: space-between;
       background: #0d0d0d;
     }
+    .streams-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
 
     .streams-list {
       flex: 1;
@@ -838,6 +843,7 @@ export class FeedboardApp extends LitElement {
   @state() private showShortcuts = false
   @state() private thumbnails: Map<string, string> = new Map()
   @state() private thumbnailerConnected = false
+  @state() private showThumbs = true
 
   private client: MediaMTXClient | null = null
   private thumbnailerClient: ThumbnailerClient | null = null
@@ -1516,16 +1522,27 @@ export class FeedboardApp extends LitElement {
 
         <div class="streams-header">
           <span>Streams (${this.streams.length})</span>
-          <button class="refresh-btn" @click=${() => this.fetchStreams()} title="Refresh streams">
-            ${icons.refresh}
-          </button>
+          <div class="streams-header-actions">
+            ${this.thumbnailerConnected ? html`
+              <button
+                class="refresh-btn ${this.showThumbs ? 'active' : ''}"
+                @click=${() => this.showThumbs = !this.showThumbs}
+                title="${this.showThumbs ? 'Hide thumbnails' : 'Show thumbnails'}"
+              >
+                ${icons.image}
+              </button>
+            ` : ''}
+            <button class="refresh-btn" @click=${() => this.fetchStreams()} title="Refresh streams">
+              ${icons.refresh}
+            </button>
+          </div>
         </div>
 
         <div class="streams-list">
           ${this.streams.map(
             (stream) => {
               const liveThumb = this.thumbnails.get(stream.name)
-              const showThumbnails = this.thumbnailerConnected && liveThumb
+              const showThumbnails = this.showThumbs && this.thumbnailerConnected && liveThumb
               const handleDragStart = (e: DragEvent) => {
                 setStreamDragData(e, stream.name)
               }
