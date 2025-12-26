@@ -18,12 +18,12 @@ const distDir = resolve(__dirname, '../dist')
 // Default config - edit these values before serving
 const config = {
   // MediaMTX server URLs
-  // "/" = relative paths (for reverse proxy setups)
-  // "" = use default MediaMTX ports on same hostname
-  // Full URL = use that URL
-  api: '/',
-  webrtc: '/',
-  hls: '/',
+  // "" = use default MediaMTX ports on same hostname (api:9997, webrtc:8889, hls:8888)
+  // "/" = relative paths (for reverse proxy setups where all services are on same origin)
+  // Full URL = use that URL (e.g., "http://mediamtx.local:9997")
+  api: '',
+  webrtc: '',
+  hls: '',
 
   // Optional thumbnailer service
   thumbnails: '',
