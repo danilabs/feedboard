@@ -884,6 +884,7 @@ export class FeedboardApp extends LitElement {
   @state() private clockLabel = 'Local'
   @state() private clockFormat = 'HH:mm:ss'
   @state() private capturePublishPath = '/webcam'
+  @state() private youtubeUrl = ''
 
 
   connectedCallback() {
@@ -1381,6 +1382,38 @@ export class FeedboardApp extends LitElement {
     }
   }
 
+  private addYoutubeToCell() {
+    if (!this.youtubeUrl.trim()) return
+
+    if (this.selectedCell === null) {
+      const emptyIndex = this.cells.findIndex((c) => c.type === 'empty')
+      if (emptyIndex !== -1) {
+        this.selectedCell = emptyIndex
+      } else {
+        return
+      }
+    }
+
+    const newCells = [...this.cells]
+    newCells[this.selectedCell] = {
+      type: 'youtube',
+      src: this.youtubeUrl.trim(),
+    }
+    this.cells = newCells
+    this.saveState()
+
+    // Clear input
+    this.youtubeUrl = ''
+
+    // Move to next cell
+    const nextCell = this.selectedCell + 1
+    if (nextCell < this.cells.length) {
+      this.selectedCell = nextCell
+    } else {
+      this.selectedCell = null
+    }
+  }
+
   private openCaptureWindow() {
     const server = this.getServerUrl()
     const url = `/capture.html?server=${encodeURIComponent(server)}`
@@ -1639,6 +1672,26 @@ export class FeedboardApp extends LitElement {
               title="Open in new window"
             >${icons.plusSquare}</button>
           </div>
+        </div>
+
+        <div class="section-header">YouTube</div>
+        <div class="clock-controls">
+          <input
+            type="text"
+            class="label-input"
+            placeholder="Paste YouTube URL"
+            .value=${this.youtubeUrl}
+            @input=${(e: Event) => (this.youtubeUrl = (e.target as HTMLInputElement).value)}
+            @keydown=${(e: KeyboardEvent) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                this.addYoutubeToCell()
+              }
+            }}
+          />
+          <button class="add-clock-btn" @click=${() => this.addYoutubeToCell()}>
+            Add YouTube
+          </button>
         </div>
 
         <div class="shortcuts ${this.showShortcuts ? 'open' : ''}">

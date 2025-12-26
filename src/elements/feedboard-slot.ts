@@ -1,9 +1,10 @@
 import { LitElement, html, css } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { setSlotDragData, parseDragData } from '@/lib/drag-utils'
+import './feedboard-youtube'
 
 export interface SlotConfig {
-  type: 'stream' | 'clock' | 'slate' | 'capture' | 'empty'
+  type: 'stream' | 'clock' | 'slate' | 'capture' | 'youtube' | 'empty'
   src?: string
   text?: string
   timezone?: string
@@ -255,6 +256,15 @@ export class FeedboardSlot extends LitElement {
             ?show-label=${this.showLabel}
             ?show-vu=${this.showVu}
           ></feedboard-capture>
+        `
+
+      case 'youtube':
+        return html`
+          <feedboard-youtube
+            src=${config.src || ''}
+            ?show-label=${this.showLabel}
+            ?show-info=${this.showInfo}
+          ></feedboard-youtube>
         `
 
       default:

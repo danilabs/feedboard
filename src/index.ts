@@ -11,6 +11,7 @@ import './elements/feedboard-slot'
 import './elements/feedboard-app'
 import './elements/feedboard-header'
 import './elements/feedboard-vu'
+import './elements/feedboard-youtube'
 
 // Export classes for programmatic use
 export { FeedboardPlayer } from './elements/feedboard-player'
