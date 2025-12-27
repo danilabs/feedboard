@@ -35,13 +35,17 @@
 		reverse_proxy {$MTX_HOST:mediamtx}:9997
 	}
 
-	# Thumbnailer
-	handle /thumbs/ws {
-		reverse_proxy {$THUMBNAILER_HOST:thumbnailer}:8090 {
-			header_up Connection {>Connection}
-			header_up Upgrade {>Upgrade}
-		}
+	# Thumbnailer WebSocket - must come before handle_path
+	@thumbs_ws {
+		path /thumbs/ws
+		header Connection *Upgrade*
 	}
+	handle @thumbs_ws {
+		uri strip_prefix /thumbs
+		reverse_proxy {$THUMBNAILER_HOST:thumbnailer}:8090
+	}
+
+	# Thumbnailer API - handle_path strips /thumbs prefix
 	handle_path /thumbs/* {
 		reverse_proxy {$THUMBNAILER_HOST:thumbnailer}:8090
 	}

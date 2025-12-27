@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/gorilla/mux"
 )
@@ -26,10 +27,13 @@ func main() {
 	flag.BoolVar(&config.SecureCookies, "secure-cookies", false, "Set secure flag on cookies (enable for HTTPS)")
 	flag.Parse()
 
-	// Generate JWT secret if not provided
+	// Get JWT secret from env or flag, generate if not provided
+	if config.JWTSecret == "" {
+		config.JWTSecret = os.Getenv("JWT_SECRET")
+	}
 	if config.JWTSecret == "" {
 		config.JWTSecret = generateSecureToken(32)
-		log.Printf("Generated JWT secret (will change on restart)")
+		log.Printf("WARNING: Generated JWT secret (tokens invalid on restart, set JWT_SECRET env var)")
 	}
 
 	// Initialize database

@@ -45,12 +45,24 @@ services:
     ports:
       - "8554:8554"   # RTSP
       - "1935:1935"   # RTMP
+      - "9997:9997"   # API
     expose:
       - "8888"        # HLS
       - "8889"        # WebRTC
-      - "9997"        # API
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
+    networks:
+      - feedboard-net
+
+  authproxy:
+    build: ./authproxy
+    expose:
+      - "8091"
+    environment:
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
+      - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-dev-thumbnailer-token}
+    volumes:
+      - authproxy_data:/data
     networks:
       - feedboard-net
 
@@ -59,6 +71,8 @@ services:
     profiles: [thumbs]
     expose:
       - "8090"
+    environment:
+      - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-dev-thumbnailer-token}
     command:
       - "-mediamtx-api=http://${MTX_HOST:-mediamtx}:9997"
       - "-mediamtx-rtsp=rtsp://${MTX_HOST:-mediamtx}:8554"
@@ -74,3 +88,4 @@ networks:
 volumes:
   node_modules:
   caddy_data:
+  authproxy_data:

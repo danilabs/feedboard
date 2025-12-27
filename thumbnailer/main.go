@@ -23,9 +23,18 @@ func main() {
 	thumbnailWidth := flag.Int("thumbnail-width", 320, "Thumbnail width in pixels (0 = original)")
 	flag.Parse()
 
+	// Build RTSP URL with token auth if available
+	rtspURL := *mediamtxRTSP
+	if token := os.Getenv("THUMBNAILER_TOKEN"); token != "" {
+		// Inject token as password: rtsp://host:port -> rtsp://service:token@host:port
+		if len(rtspURL) > 7 && rtspURL[:7] == "rtsp://" {
+			rtspURL = "rtsp://service:" + token + "@" + rtspURL[7:]
+		}
+	}
+
 	log.Printf("Thumbnailer starting...")
 	log.Printf("  MediaMTX API: %s", *mediamtxAPI)
-	log.Printf("  MediaMTX RTSP: %s", *mediamtxRTSP)
+	log.Printf("  MediaMTX RTSP: %s (auth: %v)", *mediamtxRTSP, os.Getenv("THUMBNAILER_TOKEN") != "")
 	log.Printf("  HTTP Port: %d", *port)
 	log.Printf("  Capture Mode: %s", *captureMode)
 
@@ -35,7 +44,7 @@ func main() {
 	}
 
 	// Create components
-	mtxClient := NewMediaMTXClient(*mediamtxAPI, *mediamtxRTSP, *pollInterval)
+	mtxClient := NewMediaMTXClient(*mediamtxAPI, rtspURL, *pollInterval)
 
 	mode := CaptureModeKeyframe
 	if *captureMode == "interval" {
@@ -49,7 +58,7 @@ func main() {
 		ThumbnailQuality: *thumbnailQuality,
 	}
 
-	capture, err := NewCaptureManager(*mediamtxRTSP, captureConfig)
+	capture, err := NewCaptureManager(rtspURL, captureConfig)
 	if err != nil {
 		log.Fatalf("Failed to create capture manager: %v", err)
 	}

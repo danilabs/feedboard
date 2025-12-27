@@ -155,6 +155,13 @@ export class FeedboardHeader extends LitElement {
   }
 
   private async checkAuth() {
+    // Skip auth check if auth is disabled
+    const { isAuthEnabled } = await import('@/lib/config')
+    if (!isAuthEnabled()) {
+      this.authChecked = true
+      return
+    }
+
     try {
       const res = await fetch('/auth/me', { credentials: 'same-origin' })
       if (res.ok) {

@@ -906,7 +906,9 @@ export class FeedboardApp extends LitElement {
   }
 
   private initThumbnailer() {
-    if (!getThumbnailsUrl()) return
+    const thumbsUrl = getThumbnailsUrl()
+    console.log('[Thumbnailer] URL:', thumbsUrl)
+    if (thumbsUrl === undefined) return
 
     this.thumbnailerClient = getThumbnailerClient()
     this.thumbnailerClient.setThumbnailCallback((stream, dataUrl) => {

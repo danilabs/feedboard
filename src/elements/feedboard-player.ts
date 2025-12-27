@@ -632,7 +632,9 @@ export class FeedboardPlayer extends LitElement {
           this.startStatsPolling()
         }
       } else if (urls.hlsUrl) {
+        const token = await getStreamToken()
         this.hlsPlayer = new HlsPlayer(urls.hlsUrl, this.videoElement)
+        this.hlsPlayer.setToken(token)
         this.hlsPlayer.connect()
         this.activeProtocol = 'hls'
       } else {
@@ -662,7 +664,9 @@ export class FeedboardPlayer extends LitElement {
       this.videoElement = this.shadowRoot?.querySelector('video') || null
       if (!this.videoElement) return
 
+      const token = await getStreamToken()
       this.hlsPlayer = new HlsPlayer(url, this.videoElement)
+      this.hlsPlayer.setToken(token)
       this.hlsPlayer.connect()
       this.status = 'playing'
     } catch (error) {

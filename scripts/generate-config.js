@@ -2,8 +2,11 @@
 /**
  * Generate config.json for production deployment.
  *
- * This creates a config file with default values that can be edited
- * before serving the built application.
+ * Default behavior (empty config):
+ * - HTTPS: relative paths, auth enabled, thumbs enabled
+ * - HTTP: direct MediaMTX ports, no auth, no thumbs
+ *
+ * Override any setting by adding it to this config.
  *
  * Usage: node scripts/generate-config.js
  */
@@ -15,27 +18,27 @@ import { fileURLToPath } from 'url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const distDir = resolve(__dirname, '../dist')
 
-// Default config - edit these values before serving
+// Default config - empty uses protocol-based defaults
+// Uncomment and edit to override specific settings
 const config = {
-  // MediaMTX server URLs
-  // "" = use default ports on same hostname (api:9997, webrtc:8889, hls:8888)
-  // "/" = relative paths (for reverse proxy setups where all services are on same origin)
-  // Full URL = use that URL (e.g., "http://mediamtx.local:9997")
-  api: '',
-  webrtc: '',
-  hls: '',
+  // MediaMTX URLs (optional - defaults based on protocol)
+  // api: '/',          // Relative paths (behind proxy)
+  // api: '',           // Default port on same host
+  // api: 'http://...'  // Full URL
 
-  // Optional thumbnailer service
-  // enabled: true/false - whether to use thumbnailer
-  // url: "" = default port 8090, "/" = relative paths, or full URL
-  thumbnails: {
-    enabled: false,
-  },
+  // webrtc: '/',
+  // hls: '/',
 
-  // Authentication settings
-  auth: {
-    enabled: false,
-  },
+  // Thumbnails (optional - HTTPS default: enabled, HTTP default: disabled)
+  // thumbnails: {
+  //   enabled: true,
+  //   url: '/',
+  // },
+
+  // Auth (optional - HTTPS default: enabled, HTTP default: disabled)
+  // auth: {
+  //   enabled: true,
+  // },
 }
 
 // Ensure dist directory exists

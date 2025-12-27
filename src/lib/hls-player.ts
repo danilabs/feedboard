@@ -2,6 +2,7 @@ import Hls from 'hls.js'
 
 export class HlsPlayer {
   private hls: Hls | null = null
+  private token: string | null = null
   public onError: ((error: string) => void) | null = null
 
   constructor(
@@ -9,14 +10,28 @@ export class HlsPlayer {
     private videoElement: HTMLVideoElement
   ) {}
 
+  /** Set JWT token for authenticated playback */
+  setToken(token: string | null): void {
+    this.token = token
+  }
+
   connect(): void {
     console.log('[HLS] Connecting to:', this.url)
 
     if (Hls.isSupported()) {
-      this.hls = new Hls({
+      const config: Partial<Hls['config']> = {
         enableWorker: true,
         lowLatencyMode: true,
-      })
+      }
+
+      // Add JWT auth header if token is set
+      if (this.token) {
+        config.xhrSetup = (xhr: XMLHttpRequest) => {
+          xhr.setRequestHeader('Authorization', `Bearer ${this.token}`)
+        }
+      }
+
+      this.hls = new Hls(config)
 
       this.hls.loadSource(this.url)
       this.hls.attachMedia(this.videoElement)
@@ -47,8 +62,11 @@ export class HlsPlayer {
         }
       })
     } else if (this.videoElement.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native HLS support (Safari)
-      this.videoElement.src = this.url
+      // Native HLS support (Safari) - append JWT to URL
+      const urlWithToken = this.token
+        ? `${this.url}${this.url.includes('?') ? '&' : '?'}jwt=${this.token}`
+        : this.url
+      this.videoElement.src = urlWithToken
       this.videoElement.addEventListener('loadedmetadata', () => {
         this.videoElement.play().catch(() => {})
       })

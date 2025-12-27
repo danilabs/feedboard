@@ -192,7 +192,7 @@ export function getThumbnailsUrl(): string | undefined {
  */
 export function buildThumbnailUrl(path: string): string | undefined {
   const base = getThumbnailsUrl()
-  if (!base) return undefined
+  if (base === undefined) return undefined
   const cleanPath = path.startsWith('/') ? path.slice(1) : path
   return `${base}/api/streams/${cleanPath}/thumbnail.jpg`
 }
@@ -265,9 +265,14 @@ let tokenFetchPromise: Promise<string | null> | null = null
 /**
  * Get a JWT token for stream authentication.
  * This token can be passed to WHEP/WHIP URLs as ?jwt=xxx
- * Returns null if not authenticated.
+ * Returns null if auth is disabled or not authenticated.
  */
 export async function getStreamToken(): Promise<string | null> {
+  // Skip if auth is disabled
+  if (!isAuthEnabled()) {
+    return null
+  }
+
   // Return cached token if available
   if (cachedStreamToken) {
     return cachedStreamToken

@@ -7,6 +7,8 @@
  * - Role-based permission checking
  */
 
+import { isAuthEnabled } from './config'
+
 export interface AuthUser {
   id: number
   username: string
@@ -19,9 +21,17 @@ let authChecked = false
 
 /**
  * Check authentication status by calling /auth/me.
+ * Skips the check if auth is disabled in config.
  * Caches the result for subsequent sync access.
  */
 export async function checkAuth(): Promise<AuthUser | null> {
+  // Skip if auth is disabled
+  if (!isAuthEnabled()) {
+    currentUser = null
+    authChecked = true
+    return null
+  }
+
   // Return cached result if already checked
   if (authPromise) {
     return authPromise

@@ -1,15 +1,11 @@
 /**
- * Runtime config loader - loads configuration from config.json or fallbacks.
+ * Runtime config loader - loads configuration from config.json or uses smart defaults.
  *
- * Priority:
- * 1. window.FEEDBOARD_CONFIG (for standalone examples)
- * 2. /config.json file
- * 3. Default MediaMTX ports on same hostname (fallback)
+ * Default behavior based on protocol:
+ * - HTTPS: Assumes reverse proxy (Caddy), uses relative paths, auth + thumbs enabled
+ * - HTTP: Assumes direct access, uses default MediaMTX ports, no auth/thumbs
  *
- * Config values:
- * - Empty string "" = use default MediaMTX port on same hostname
- * - "/" = use relative paths (for reverse proxy setups)
- * - Full URL = use that URL
+ * Config.json can override any of these defaults.
  */
 
 export interface RuntimeConfig {
@@ -18,75 +14,116 @@ export interface RuntimeConfig {
   hls: string
   thumbnails?: {
     enabled: boolean
-    url?: string  // resolved URL (empty = default port, "/" = relative, full URL = as-is)
+    url?: string
   }
   auth?: {
     enabled: boolean
   }
 }
 
-// Default ports
+// Default MediaMTX ports for direct access
 const DEFAULT_PORTS = {
-  api: 9997,      // MediaMTX API
-  webrtc: 8889,   // MediaMTX WebRTC
-  hls: 8888,      // MediaMTX HLS
-  thumbs: 8090,   // Thumbnailer
+  api: 9997,
+  webrtc: 8889,
+  hls: 8888,
+  thumbs: 8090,
 }
 
 let loadedConfig: RuntimeConfig | null = null
 let configPromise: Promise<RuntimeConfig> | null = null
 
 /**
- * Resolve a config value to a full URL.
- * - Empty string → default port on same hostname
- * - "/" → empty string (relative paths)
+ * Check if we're running over HTTPS (assumed to be behind a reverse proxy).
+ */
+function isSecure(): boolean {
+  return window.location.protocol === 'https:'
+}
+
+/**
+ * Build URL for direct port access (HTTP mode).
+ */
+function buildDirectUrl(port: number): string {
+  const { protocol, hostname } = window.location
+  return `${protocol}//${hostname}:${port}`
+}
+
+/**
+ * Resolve a config value to a URL.
+ * - undefined → use protocol-based default
+ * - "/" or "" with HTTPS → relative paths
+ * - "" with HTTP → direct port
  * - Full URL → use as-is
  */
-function resolveConfigValue(value: string | undefined, defaultPort: number): string {
-  if (value === undefined || value === '') {
-    // Empty = use default port
-    const { protocol, hostname } = window.location
-    return `${protocol}//${hostname}:${defaultPort}`
+function resolveUrl(value: string | undefined, defaultPort: number): string {
+  // Explicit full URL
+  if (value && value.startsWith('http')) {
+    return value
   }
+
+  // Explicit relative path
   if (value === '/') {
-    // Slash = relative paths (for reverse proxy)
     return ''
   }
-  // Full URL = use as-is
-  return value
+
+  // Empty or undefined → use protocol-based default
+  if (isSecure()) {
+    return '' // Relative paths for HTTPS
+  }
+  return buildDirectUrl(defaultPort) // Direct port for HTTP
 }
 
 /**
- * Resolve thumbnails config to enabled flag + resolved URL.
+ * Resolve thumbnails config.
+ * - HTTPS default: enabled with relative paths
+ * - HTTP default: disabled
+ * - Config can override
  */
-function resolveThumbnailsConfig(
+function resolveThumbnails(
   config: { enabled?: boolean; url?: string } | undefined
 ): { enabled: boolean; url?: string } | undefined {
-  if (!config?.enabled) {
-    return undefined
+  // Explicit config takes precedence
+  if (config !== undefined) {
+    if (!config.enabled) {
+      return undefined
+    }
+    return {
+      enabled: true,
+      url: resolveUrl(config.url, DEFAULT_PORTS.thumbs),
+    }
   }
-  return {
-    enabled: true,
-    url: resolveConfigValue(config.url, DEFAULT_PORTS.thumbs),
+
+  // Default based on protocol
+  if (isSecure()) {
+    return { enabled: true, url: '/thumbs' } // HTTPS: enabled via Caddy proxy
   }
+  return undefined // HTTP: disabled
 }
 
 /**
- * Build default config using current hostname with default ports.
+ * Resolve auth config.
+ * - HTTPS default: enabled
+ * - HTTP default: disabled
+ * - Config can override
  */
-function buildDefaultConfig(): RuntimeConfig {
-  const { protocol, hostname } = window.location
-  return {
-    api: `${protocol}//${hostname}:${DEFAULT_PORTS.api}`,
-    webrtc: `${protocol}//${hostname}:${DEFAULT_PORTS.webrtc}`,
-    hls: `${protocol}//${hostname}:${DEFAULT_PORTS.hls}`,
+function resolveAuth(
+  config: { enabled?: boolean } | undefined
+): { enabled: boolean } | undefined {
+  // Explicit config takes precedence
+  if (config !== undefined) {
+    return config.enabled ? { enabled: true } : undefined
   }
+
+  // Default based on protocol
+  if (isSecure()) {
+    return { enabled: true } // HTTPS: enabled
+  }
+  return undefined // HTTP: disabled
 }
 
 /**
- * Try to load config.json from the server
+ * Try to load config.json from the server.
  */
-async function loadConfigFromJson(): Promise<RuntimeConfig | null> {
+async function loadConfigFromJson(): Promise<Record<string, any> | null> {
   try {
     const res = await fetch('/config.json')
     if (!res.ok) {
@@ -99,58 +136,39 @@ async function loadConfigFromJson(): Promise<RuntimeConfig | null> {
     }
     return await res.json()
   } catch {
-    // config.json not available or invalid - that's fine
+    return null
   }
-  return null
 }
 
 /**
  * Load configuration asynchronously.
- * Checks window.FEEDBOARD_CONFIG first, then tries config.json,
- * then falls back to default MediaMTX ports.
+ * Priority: window.FEEDBOARD_CONFIG > config.json > protocol-based defaults
  */
 export async function loadConfig(): Promise<RuntimeConfig> {
-  // Return cached config if already loaded
   if (loadedConfig) {
     return loadedConfig
   }
 
-  // Return existing promise if loading in progress
   if (configPromise) {
     return configPromise
   }
 
   configPromise = (async () => {
-    // 1. Check window.FEEDBOARD_CONFIG (for standalone examples)
-    if (window.FEEDBOARD_CONFIG) {
-      loadedConfig = {
-        api: resolveConfigValue(window.FEEDBOARD_CONFIG.api, DEFAULT_PORTS.api),
-        webrtc: resolveConfigValue(window.FEEDBOARD_CONFIG.webrtc, DEFAULT_PORTS.webrtc),
-        hls: resolveConfigValue(window.FEEDBOARD_CONFIG.hls, DEFAULT_PORTS.hls),
-        thumbnails: resolveThumbnailsConfig(window.FEEDBOARD_CONFIG.thumbnails as any),
-        auth: window.FEEDBOARD_CONFIG.auth
-          ? { enabled: true }
-          : undefined,
-      }
-      return loadedConfig
+    // Check window.FEEDBOARD_CONFIG first (for standalone examples)
+    const windowConfig = window.FEEDBOARD_CONFIG
+    const fileConfig = windowConfig ? null : await loadConfigFromJson()
+    const config = windowConfig || fileConfig || {}
+
+    loadedConfig = {
+      api: resolveUrl(config.api, DEFAULT_PORTS.api),
+      webrtc: resolveUrl(config.webrtc, DEFAULT_PORTS.webrtc),
+      hls: resolveUrl(config.hls, DEFAULT_PORTS.hls),
+      thumbnails: resolveThumbnails(config.thumbnails),
+      auth: resolveAuth(config.auth),
     }
 
-    // 2. Try to load config.json
-    const fileConfig = await loadConfigFromJson()
-    if (fileConfig) {
-      // Resolve empty strings to default ports, "/" to relative paths
-      loadedConfig = {
-        api: resolveConfigValue(fileConfig.api, DEFAULT_PORTS.api),
-        webrtc: resolveConfigValue(fileConfig.webrtc, DEFAULT_PORTS.webrtc),
-        hls: resolveConfigValue(fileConfig.hls, DEFAULT_PORTS.hls),
-        thumbnails: resolveThumbnailsConfig(fileConfig.thumbnails as any),
-        auth: fileConfig.auth,
-      }
-      return loadedConfig
-    }
-
-    // 3. Default: use MediaMTX default ports on same hostname
-    loadedConfig = buildDefaultConfig()
+    console.log('[Config] Loaded:', loadedConfig)
+    console.log('[Config] Protocol:', window.location.protocol, 'isSecure:', isSecure())
     return loadedConfig
   })()
 
