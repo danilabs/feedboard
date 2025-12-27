@@ -705,12 +705,16 @@ export class RouteAdmin extends LitElement {
     const host = this.getHost()
     const path = k.path_pattern === '*' ? 'your-stream-name' : k.path_pattern.replace('/*', '/your-stream-name').replace('*', 'your-stream-name')
 
-    // Connection URLs for different protocols
+    // Publish URLs
     const rtmpServer = `rtmp://${host}:1935`
     const rtmpStreamKey = `${path}?key=${k.key}`
-    const srtUrl = `srt://${host}:8890?streamid=#!::m=${k.type === 'publish' ? 'publish' : 'request'},r=${path},u=stream,s=${k.key}`
-    const rtspUrl = `rtsp://stream:${k.key}@${host}:8554/${path}`
-    const playbackUrl = `https://${host}/${path}?token=${k.key}`
+    const srtUrl = `srt://${host}:8890?streamid=#!::m=publish,r=${path},u=stream,s=${k.key}`
+    const whipUrl = `https://${host}/${path}/whip?key=${k.key}`
+
+    // Playback URLs
+    const whepUrl = `https://${host}/${path}/whep?token=${k.key}`
+    const hlsUrl = `https://${host}/${path}/index.m3u8?token=${k.key}`
+    const rtspPlayUrl = `rtsp://stream:${k.key}@${host}:8554/${path}`
 
     return html`
       <div class="modal-overlay" @click=${(e: Event) => e.target === e.currentTarget && (this.showKeyInfoModal = false)}>
@@ -757,19 +761,39 @@ export class RouteAdmin extends LitElement {
             </div>
 
             <div class="connection-group">
-              <h4>RTSP</h4>
+              <h4>WHIP (WebRTC publish)</h4>
               <div class="connection-field">
-                <input type="text" readonly .value=${rtspUrl}>
-                <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(rtspUrl, e.target as HTMLButtonElement)}>Copy</button>
+                <input type="text" readonly .value=${whipUrl}>
+                <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(whipUrl, e.target as HTMLButtonElement)}>Copy</button>
               </div>
+              <p class="connection-note">OBS 30+ or browser-based encoders</p>
             </div>
           ` : html`
             <div class="connection-group">
-              <h4>Playback URL</h4>
+              <h4>WHEP (WebRTC playback)</h4>
               <div class="connection-field">
-                <input type="text" readonly .value=${playbackUrl}>
-                <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(playbackUrl, e.target as HTMLButtonElement)}>Copy</button>
+                <input type="text" readonly .value=${whepUrl}>
+                <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(whepUrl, e.target as HTMLButtonElement)}>Copy</button>
               </div>
+              <p class="connection-note">Low latency WebRTC</p>
+            </div>
+
+            <div class="connection-group">
+              <h4>HLS</h4>
+              <div class="connection-field">
+                <input type="text" readonly .value=${hlsUrl}>
+                <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(hlsUrl, e.target as HTMLButtonElement)}>Copy</button>
+              </div>
+              <p class="connection-note">Compatible with most players</p>
+            </div>
+
+            <div class="connection-group">
+              <h4>RTSP</h4>
+              <div class="connection-field">
+                <input type="text" readonly .value=${rtspPlayUrl}>
+                <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(rtspPlayUrl, e.target as HTMLButtonElement)}>Copy</button>
+              </div>
+              <p class="connection-note">VLC, ffplay, etc.</p>
             </div>
           `}
 

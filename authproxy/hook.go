@@ -131,9 +131,12 @@ func (h *HookHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 2. Token in query string (?token=xxx) - for SRT and other protocols
+	// 2. Token/key in query string (?token=xxx or ?key=xxx) - for SRT, RTMP, etc.
 	if req.Query != "" {
 		token := extractQueryParam(req.Query, "token")
+		if token == "" {
+			token = extractQueryParam(req.Query, "key")
+		}
 		if token != "" {
 			keyType := "publish"
 			if action == "read" {
@@ -144,7 +147,7 @@ func (h *HookHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 				log.Printf("Hook: token validation error: %v", err)
 			}
 			if key != nil {
-				log.Printf("Hook: authenticated via query token: %s...", key.Key[:12])
+				log.Printf("Hook: authenticated via query param: %s...", key.Key[:12])
 				w.WriteHeader(http.StatusOK)
 				return
 			}

@@ -18,28 +18,22 @@ services:
     environment:
       - DOMAIN=${DOMAIN:-:443}
       - TLS_MODE=${TLS_MODE:-internal}
+      - MTX_HOST=host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - caddy_data:/data
     depends_on:
-      - mediamtx
       - authproxy
     networks:
       - feedboard-net
 
+  # MediaMTX runs on host network for optimal WebRTC/UDP performance
   mediamtx:
     image: bluenviron/mediamtx:latest-ffmpeg
-    ports:
-      - "8554:8554"   # RTSP
-      - "1935:1935"   # RTMP
-      - "8890:8890/udp"  # SRT
-    expose:
-      - "8888"        # HLS (internal)
-      - "8889"        # WebRTC (internal)
-      - "9997"        # API (internal)
+    network_mode: host
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
-    networks:
-      - feedboard-net
 
   authproxy:
     build: ./authproxy
@@ -60,11 +54,11 @@ services:
       - "8090"
     environment:
       - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:?Set THUMBNAILER_TOKEN in .env}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command:
-      - "-mediamtx-api=http://mediamtx:9997"
-      - "-mediamtx-rtsp=rtsp://mediamtx:8554"
-    depends_on:
-      - mediamtx
+      - "-mediamtx-api=http://host.docker.internal:9997"
+      - "-mediamtx-rtsp=rtsp://host.docker.internal:8554"
     networks:
       - feedboard-net
 
