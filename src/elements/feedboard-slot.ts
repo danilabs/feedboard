@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { setSlotDragData, parseDragData } from '@/lib/drag-utils'
+import './feedboard-clock'
 import './feedboard-youtube'
 
 export interface SlotConfig {
