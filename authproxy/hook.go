@@ -42,8 +42,8 @@ func (h *HookHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Hook: action=%s path=%s protocol=%s ip=%s user=%s token=%v query=%s",
-		req.Action, req.Path, req.Protocol, req.IP, req.User, req.Token != "", req.Query)
+	log.Printf("Hook: action=%s path=%s protocol=%s ip=%s user=%s pass=%v token=%v query=%s",
+		req.Action, req.Path, req.Protocol, req.IP, req.User, req.Password != "", req.Token != "", req.Query)
 
 	// Allow localhost connections without auth (for local testing)
 	if isLocalhost(req.IP) {
@@ -107,7 +107,7 @@ func (h *HookHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 		}
 		key, _ := h.db.ValidateStreamKey(req.Token, keyType, path, action)
 		if key != nil {
-			log.Printf("Hook: authenticated via token field as stream key: %s", key.KeyPrefix)
+			log.Printf("Hook: authenticated via token field as stream key: %s...", key.Key[:12])
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -125,23 +125,26 @@ func (h *HookHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Hook: stream key validation error: %v", err)
 		}
 		if key != nil {
-			log.Printf("Hook: authenticated via stream key: %s", key.KeyPrefix)
+			log.Printf("Hook: authenticated via stream key: %s...", key.Key[:12])
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 	}
 
-	// 2. Token in query string (?token=xxx)
+	// 2. Token in query string (?token=xxx) - for SRT and other protocols
 	if req.Query != "" {
 		token := extractQueryParam(req.Query, "token")
 		if token != "" {
-			keyType := "playback" // Query tokens are typically for playback
+			keyType := "publish"
+			if action == "read" {
+				keyType = "playback"
+			}
 			key, err := h.db.ValidateStreamKey(token, keyType, path, action)
 			if err != nil {
 				log.Printf("Hook: token validation error: %v", err)
 			}
 			if key != nil {
-				log.Printf("Hook: authenticated via query token: %s", key.KeyPrefix)
+				log.Printf("Hook: authenticated via query token: %s...", key.Key[:12])
 				w.WriteHeader(http.StatusOK)
 				return
 			}

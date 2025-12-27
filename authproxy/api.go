@@ -223,25 +223,16 @@ func (h *APIHandler) HandleCreateStreamKey(w http.ResponseWriter, r *http.Reques
 		expiresAt = &t
 	}
 
-	key, plainKey, err := h.db.CreateStreamKey(req.Type, req.PathPattern, currentUser.ID, req.Note, expiresAt)
+	key, err := h.db.CreateStreamKey(req.Type, req.PathPattern, currentUser.ID, req.Note, expiresAt)
 	if err != nil {
 		log.Printf("Create stream key error: %v", err)
 		http.Error(w, "Failed to create stream key", http.StatusInternalServerError)
 		return
 	}
 
-	// Return the key including the plain text key (only shown once!)
-	response := struct {
-		*StreamKey
-		Key string `json:"key"` // The actual key, only returned on creation
-	}{
-		StreamKey: key,
-		Key:       plainKey,
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(key)
 }
 
 // HandleDeleteStreamKey handles DELETE /api/keys/{id}

@@ -224,12 +224,11 @@ func (m *CaptureManager) captureFrame(capture *StreamCapture) {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	cmd.Stderr = nil
 	cmd.Stdout = nil
 
 	if err := cmd.Run(); err != nil {
-		log.Printf("FFmpeg capture failed for %s: %v - %s", capture.streamName, err, stderr.String())
+		// Stream may be temporarily unavailable, don't log every error
 		return
 	}
 

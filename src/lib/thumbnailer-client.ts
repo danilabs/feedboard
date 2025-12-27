@@ -48,11 +48,9 @@ export class ThumbnailerClient {
    */
   connect(): void {
     const base = getThumbnailsUrl()
-    console.log('[Thumbnailer] connect() base:', base)
     if (base === undefined) return
 
     const wsUrl = base.replace(/^http/, 'ws') + '/ws'
-    console.log('[Thumbnailer] Connecting to:', wsUrl)
 
     try {
       this.ws = new WebSocket(wsUrl)

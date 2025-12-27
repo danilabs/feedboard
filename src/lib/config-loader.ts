@@ -167,8 +167,6 @@ export async function loadConfig(): Promise<RuntimeConfig> {
       auth: resolveAuth(config.auth),
     }
 
-    console.log('[Config] Loaded:', loadedConfig)
-    console.log('[Config] Protocol:', window.location.protocol, 'isSecure:', isSecure())
     return loadedConfig
   })()
 

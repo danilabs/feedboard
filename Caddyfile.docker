@@ -6,7 +6,7 @@
 {$DOMAIN} {
 	tls {$TLS_MODE}
 
-	# Auth proxy (optional - enable with --profile auth)
+	# Auth proxy
 	handle /auth/* {
 		reverse_proxy authproxy:8091
 	}
@@ -17,6 +17,21 @@
 	# MediaMTX API
 	handle /v3/* {
 		reverse_proxy mediamtx:9997
+	}
+
+	# Thumbnailer WebSocket
+	@thumbs_ws {
+		path /thumbs/ws
+		header Connection *Upgrade*
+	}
+	handle @thumbs_ws {
+		uri strip_prefix /thumbs
+		reverse_proxy thumbnailer:8090
+	}
+
+	# Thumbnailer API
+	handle_path /thumbs/* {
+		reverse_proxy thumbnailer:8090
 	}
 
 	# MediaMTX WebRTC - WHIP endpoints (publish)

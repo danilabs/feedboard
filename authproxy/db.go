@@ -25,9 +25,9 @@ type User struct {
 // StreamKey represents a publish or playback key
 type StreamKey struct {
 	ID          int64      `json:"id"`
+	Key         string     `json:"key"`
 	KeyHash     string     `json:"-"`
-	KeyPrefix   string     `json:"key_prefix"` // first 8 chars for display
-	Type        string     `json:"type"`       // publish, playback
+	Type        string     `json:"type"` // publish, playback
 	PathPattern string     `json:"path_pattern"`
 	OwnerID     int64      `json:"owner_id"`
 	OwnerName   string     `json:"owner_name,omitempty"`
@@ -79,7 +79,7 @@ func InitDB(dbPath string) (*DB, error) {
 	CREATE TABLE IF NOT EXISTS stream_keys (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		key_hash TEXT UNIQUE NOT NULL,
-		key_prefix TEXT NOT NULL,
+		stream_key TEXT NOT NULL,
 		type TEXT NOT NULL,
 		path_pattern TEXT NOT NULL,
 		owner_id INTEGER NOT NULL,
@@ -104,6 +104,11 @@ func InitDB(dbPath string) (*DB, error) {
 	if _, err := db.Exec(schema); err != nil {
 		return nil, fmt.Errorf("failed to create schema: %w", err)
 	}
+
+	// Migration: add stream_key column if it doesn't exist (replaces key_prefix)
+	db.Exec("ALTER TABLE stream_keys ADD COLUMN stream_key TEXT NOT NULL DEFAULT ''")
+	// Copy key_prefix to stream_key for existing rows if needed
+	db.Exec("UPDATE stream_keys SET stream_key = key_prefix WHERE stream_key = ''")
 
 	return &DB{db}, nil
 }
@@ -231,38 +236,35 @@ func (db *DB) ValidatePassword(user *User, password string) bool {
 
 // Stream key operations
 
-func (db *DB) CreateStreamKey(keyType, pathPattern string, ownerID int64, note string, expiresAt *time.Time) (*StreamKey, string, error) {
+func (db *DB) CreateStreamKey(keyType, pathPattern string, ownerID int64, note string, expiresAt *time.Time) (*StreamKey, error) {
 	// Generate the actual key
 	key := generateStreamKey(keyType)
 	hash, err := bcrypt.GenerateFromPassword([]byte(key), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
-	prefix := key[:12] + "..."
-
 	result, err := db.Exec(
-		"INSERT INTO stream_keys (key_hash, key_prefix, type, path_pattern, owner_id, note, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		string(hash), prefix, keyType, pathPattern, ownerID, note, expiresAt,
+		"INSERT INTO stream_keys (key_hash, stream_key, type, path_pattern, owner_id, note, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		string(hash), key, keyType, pathPattern, ownerID, note, expiresAt,
 	)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	id, _ := result.LastInsertId()
-	sk, err := db.GetStreamKeyByID(id)
-	return sk, key, err
+	return db.GetStreamKeyByID(id)
 }
 
 func (db *DB) GetStreamKeyByID(id int64) (*StreamKey, error) {
 	sk := &StreamKey{}
 	err := db.QueryRow(`
-		SELECT sk.id, sk.key_prefix, sk.type, sk.path_pattern, sk.owner_id, u.username, sk.note, sk.created_at, sk.expires_at, sk.last_used_at
+		SELECT sk.id, sk.stream_key, sk.type, sk.path_pattern, sk.owner_id, u.username, sk.note, sk.created_at, sk.expires_at, sk.last_used_at
 		FROM stream_keys sk
 		JOIN users u ON sk.owner_id = u.id
 		WHERE sk.id = ?`,
 		id,
-	).Scan(&sk.ID, &sk.KeyPrefix, &sk.Type, &sk.PathPattern, &sk.OwnerID, &sk.OwnerName, &sk.Note, &sk.CreatedAt, &sk.ExpiresAt, &sk.LastUsedAt)
+	).Scan(&sk.ID, &sk.Key, &sk.Type, &sk.PathPattern, &sk.OwnerID, &sk.OwnerName, &sk.Note, &sk.CreatedAt, &sk.ExpiresAt, &sk.LastUsedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -271,7 +273,7 @@ func (db *DB) GetStreamKeyByID(id int64) (*StreamKey, error) {
 
 func (db *DB) ListStreamKeys(keyType string) ([]StreamKey, error) {
 	query := `
-		SELECT sk.id, sk.key_prefix, sk.type, sk.path_pattern, sk.owner_id, u.username, sk.note, sk.created_at, sk.expires_at, sk.last_used_at
+		SELECT sk.id, sk.stream_key, sk.type, sk.path_pattern, sk.owner_id, u.username, sk.note, sk.created_at, sk.expires_at, sk.last_used_at
 		FROM stream_keys sk
 		JOIN users u ON sk.owner_id = u.id
 	`
@@ -291,7 +293,7 @@ func (db *DB) ListStreamKeys(keyType string) ([]StreamKey, error) {
 	var keys []StreamKey
 	for rows.Next() {
 		var sk StreamKey
-		if err := rows.Scan(&sk.ID, &sk.KeyPrefix, &sk.Type, &sk.PathPattern, &sk.OwnerID, &sk.OwnerName, &sk.Note, &sk.CreatedAt, &sk.ExpiresAt, &sk.LastUsedAt); err != nil {
+		if err := rows.Scan(&sk.ID, &sk.Key, &sk.Type, &sk.PathPattern, &sk.OwnerID, &sk.OwnerName, &sk.Note, &sk.CreatedAt, &sk.ExpiresAt, &sk.LastUsedAt); err != nil {
 			return nil, err
 		}
 		keys = append(keys, sk)
@@ -302,7 +304,7 @@ func (db *DB) ListStreamKeys(keyType string) ([]StreamKey, error) {
 func (db *DB) ValidateStreamKey(key, keyType, path, action string) (*StreamKey, error) {
 	// Get all keys of this type and check each one
 	rows, err := db.Query(`
-		SELECT id, key_hash, key_prefix, type, path_pattern, owner_id, expires_at
+		SELECT id, key_hash, stream_key, type, path_pattern, owner_id, expires_at
 		FROM stream_keys
 		WHERE type = ?`,
 		keyType,
@@ -315,7 +317,7 @@ func (db *DB) ValidateStreamKey(key, keyType, path, action string) (*StreamKey, 
 	for rows.Next() {
 		var sk StreamKey
 		var keyHash string
-		if err := rows.Scan(&sk.ID, &keyHash, &sk.KeyPrefix, &sk.Type, &sk.PathPattern, &sk.OwnerID, &sk.ExpiresAt); err != nil {
+		if err := rows.Scan(&sk.ID, &keyHash, &sk.Key, &sk.Type, &sk.PathPattern, &sk.OwnerID, &sk.ExpiresAt); err != nil {
 			continue
 		}
 
@@ -326,7 +328,7 @@ func (db *DB) ValidateStreamKey(key, keyType, path, action string) (*StreamKey, 
 
 		// Check expiration
 		if sk.ExpiresAt != nil && time.Now().After(*sk.ExpiresAt) {
-			log.Printf("Stream key expired: %s", sk.KeyPrefix)
+			log.Printf("Stream key expired: %s...", sk.Key[:12])
 			return nil, nil
 		}
 

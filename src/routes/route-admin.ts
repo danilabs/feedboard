@@ -12,7 +12,7 @@ interface User {
 
 interface StreamKey {
   id: number
-  key_prefix: string
+  key: string
   type: string
   path_pattern: string
   owner_name: string
@@ -232,6 +232,60 @@ export class RouteAdmin extends LitElement {
     .copy-btn {
       margin-left: 0.5rem;
     }
+    .modal-wide {
+      max-width: 600px;
+    }
+    .connection-field {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .connection-field input {
+      flex: 1;
+      padding: 0.5rem 0.75rem;
+      background: #0a0a0a;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #4ade80;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 0.75rem;
+    }
+    .connection-field input:focus {
+      outline: none;
+      border-color: #2563eb;
+    }
+    .connection-group {
+      margin-bottom: 1.25rem;
+    }
+    .connection-group h4 {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #888;
+    }
+    .connection-note {
+      font-size: 0.7rem;
+      color: #666;
+      margin-top: 0.25rem;
+    }
+    .key-row-clickable {
+      cursor: pointer;
+    }
+    .key-row-clickable:hover {
+      background: #1a1a1a;
+    }
+    .key-info-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .key-info-header h2 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+    }
   `
 
   @state() private activeTab = 'users'
@@ -241,8 +295,8 @@ export class RouteAdmin extends LitElement {
   @state() private showAddUserModal = false
   @state() private showAddKeyModal = false
   @state() private showAddPermissionModal = false
-  @state() private showKeyCreatedModal = false
-  @state() private createdKey = ''
+  @state() private showKeyInfoModal = false
+  @state() private selectedKey: StreamKey | null = null
   @state() private loading = true
 
   async connectedCallback() {
@@ -340,16 +394,17 @@ export class RouteAdmin extends LitElement {
     const form = e.target as HTMLFormElement
     const data = new FormData(form)
     try {
-      const result = await this.api<{ key: string }>('POST', '/api/keys', {
+      const newKey = await this.api<StreamKey>('POST', '/api/keys', {
         type: data.get('type'),
         path_pattern: data.get('path_pattern'),
         note: data.get('note'),
       })
-      this.createdKey = result?.key || ''
       form.reset()
       this.showAddKeyModal = false
-      this.showKeyCreatedModal = true
       await this.loadKeys()
+      if (newKey) {
+        this.showKeyInfo(newKey)
+      }
     } catch (err: any) {
       alert('Failed to create key: ' + err.message)
     }
@@ -403,8 +458,20 @@ export class RouteAdmin extends LitElement {
     }
   }
 
-  private copyKey() {
-    navigator.clipboard.writeText(this.createdKey)
+  private showKeyInfo(key: StreamKey) {
+    this.selectedKey = key
+    this.showKeyInfoModal = true
+  }
+
+  private copyToClipboard(text: string, button: HTMLButtonElement) {
+    navigator.clipboard.writeText(text)
+    const original = button.textContent
+    button.textContent = 'Copied!'
+    setTimeout(() => { button.textContent = original }, 1500)
+  }
+
+  private getHost(): string {
+    return window.location.hostname
   }
 
   render() {
@@ -429,7 +496,7 @@ export class RouteAdmin extends LitElement {
       ${this.showAddUserModal ? this.renderAddUserModal() : ''}
       ${this.showAddKeyModal ? this.renderAddKeyModal() : ''}
       ${this.showAddPermissionModal ? this.renderAddPermissionModal() : ''}
-      ${this.showKeyCreatedModal ? this.renderKeyCreatedModal() : ''}
+      ${this.showKeyInfoModal ? this.renderKeyInfoModal() : ''}
     `
   }
 
@@ -488,15 +555,16 @@ export class RouteAdmin extends LitElement {
           ${this.keys.length === 0
             ? html`<tr><td colspan="7" class="empty-state">No stream keys found</td></tr>`
             : this.keys.map(k => html`
-                <tr>
-                  <td class="mono">${k.key_prefix}...</td>
+                <tr class="key-row-clickable" @click=${() => this.showKeyInfo(k)}>
+                  <td class="mono">${k.key.slice(0, 12)}...</td>
                   <td><span class="badge badge-${k.type}">${k.type}</span></td>
                   <td class="mono">${k.path_pattern}</td>
                   <td>${k.owner_name}</td>
                   <td class="text-muted">${k.note || '-'}</td>
                   <td class="text-muted">${new Date(k.created_at).toLocaleDateString()}</td>
                   <td class="actions">
-                    <button class="btn btn-danger btn-sm" @click=${() => this.deleteKey(k.id)}>Delete</button>
+                    <button class="btn btn-sm" @click=${(e: Event) => { e.stopPropagation(); this.showKeyInfo(k) }}>Info</button>
+                    <button class="btn btn-danger btn-sm" @click=${(e: Event) => { e.stopPropagation(); this.deleteKey(k.id) }}>Delete</button>
                   </td>
                 </tr>
               `)}
@@ -630,18 +698,83 @@ export class RouteAdmin extends LitElement {
     `
   }
 
-  private renderKeyCreatedModal() {
+  private renderKeyInfoModal() {
+    const k = this.selectedKey
+    if (!k) return ''
+
+    const host = this.getHost()
+    const path = k.path_pattern === '*' ? 'your-stream-name' : k.path_pattern.replace('/*', '/your-stream-name').replace('*', 'your-stream-name')
+
+    // Connection URLs for different protocols
+    const rtmpServer = `rtmp://${host}:1935`
+    const rtmpStreamKey = `${path}?key=${k.key}`
+    const srtUrl = `srt://${host}:8890?streamid=#!::m=${k.type === 'publish' ? 'publish' : 'request'},r=${path},u=stream,s=${k.key}`
+    const rtspUrl = `rtsp://stream:${k.key}@${host}:8554/${path}`
+    const playbackUrl = `https://${host}/${path}?token=${k.key}`
+
     return html`
-      <div class="modal-overlay" @click=${(e: Event) => e.target === e.currentTarget && (this.showKeyCreatedModal = false)}>
-        <div class="modal">
-          <h2 class="modal-title">Stream Key Created</h2>
-          <div class="key-display">
-            <code>${this.createdKey}</code>
-            <button class="btn btn-sm copy-btn" @click=${this.copyKey}>Copy</button>
-            <small>This key will only be shown once. Copy it now!</small>
+      <div class="modal-overlay" @click=${(e: Event) => e.target === e.currentTarget && (this.showKeyInfoModal = false)}>
+        <div class="modal modal-wide">
+          <div class="key-info-header">
+            <h2>Connection Info</h2>
+            <span class="badge badge-${k.type}">${k.type}</span>
           </div>
+
+          <div class="connection-group">
+            <h4>Stream Key</h4>
+            <div class="connection-field">
+              <input type="text" readonly .value=${k.key}>
+              <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(k.key, e.target as HTMLButtonElement)}>Copy</button>
+            </div>
+            <p class="connection-note">
+              Path: <code class="mono">${k.path_pattern}</code>
+              ${k.note ? html` &nbsp;|&nbsp; ${k.note}` : ''}
+            </p>
+          </div>
+
+          ${k.type === 'publish' ? html`
+            <div class="connection-group">
+              <h4>RTMP (OBS, Streamlabs)</h4>
+              <div class="connection-field">
+                <input type="text" readonly .value=${rtmpServer}>
+                <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(rtmpServer, e.target as HTMLButtonElement)}>Copy</button>
+              </div>
+              <p class="connection-note">Server URL</p>
+              <div class="connection-field">
+                <input type="text" readonly .value=${rtmpStreamKey}>
+                <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(rtmpStreamKey, e.target as HTMLButtonElement)}>Copy</button>
+              </div>
+              <p class="connection-note">Stream Key</p>
+            </div>
+
+            <div class="connection-group">
+              <h4>SRT (Low latency)</h4>
+              <div class="connection-field">
+                <input type="text" readonly .value=${srtUrl}>
+                <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(srtUrl, e.target as HTMLButtonElement)}>Copy</button>
+              </div>
+              <p class="connection-note">Custom server URL for OBS</p>
+            </div>
+
+            <div class="connection-group">
+              <h4>RTSP</h4>
+              <div class="connection-field">
+                <input type="text" readonly .value=${rtspUrl}>
+                <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(rtspUrl, e.target as HTMLButtonElement)}>Copy</button>
+              </div>
+            </div>
+          ` : html`
+            <div class="connection-group">
+              <h4>Playback URL</h4>
+              <div class="connection-field">
+                <input type="text" readonly .value=${playbackUrl}>
+                <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(playbackUrl, e.target as HTMLButtonElement)}>Copy</button>
+              </div>
+            </div>
+          `}
+
           <div class="modal-actions">
-            <button class="btn" @click=${() => this.showKeyCreatedModal = false}>Done</button>
+            <button class="btn" @click=${() => this.showKeyInfoModal = false}>Close</button>
           </div>
         </div>
       </div>
