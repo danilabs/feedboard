@@ -14,9 +14,9 @@
 		reverse_proxy authproxy:8091
 	}
 
-	# MediaMTX API
+	# MediaMTX API (host network)
 	handle /v3/* {
-		reverse_proxy mediamtx:9997
+		reverse_proxy {$MTX_HOST}:9997
 	}
 
 	# Thumbnailer WebSocket
@@ -37,19 +37,19 @@
 	# MediaMTX WebRTC - WHIP endpoints (publish)
 	@whip path */whip
 	handle @whip {
-		reverse_proxy mediamtx:8889
+		reverse_proxy {$MTX_HOST}:8889
 	}
 
 	# MediaMTX WebRTC - WHEP endpoints (playback)
 	@whep path */whep
 	handle @whep {
-		reverse_proxy mediamtx:8889
+		reverse_proxy {$MTX_HOST}:8889
 	}
 
 	# MediaMTX HLS
 	@hls path_regexp hls ^/.+\.(m3u8|ts)$
 	handle @hls {
-		reverse_proxy mediamtx:8888
+		reverse_proxy {$MTX_HOST}:8888
 	}
 
 	# Static examples (no SPA fallback)

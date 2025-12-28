@@ -22,6 +22,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
+      - ./Caddyfile.docker:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
     depends_on:
       - authproxy
@@ -32,13 +33,15 @@ services:
   mediamtx:
     image: bluenviron/mediamtx:latest-ffmpeg
     network_mode: host
+    environment:
+      - MTX_AUTHHTTPADDRESS=http://127.0.0.1:8091/auth/hook
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
 
   authproxy:
     build: ./authproxy
-    expose:
-      - "8091"
+    ports:
+      - "127.0.0.1:8091:8091"  # Expose on localhost for mediamtx (host network)
     environment:
       - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env}
       - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-}
@@ -49,7 +52,6 @@ services:
 
   thumbnailer:
     build: ./thumbnailer
-    profiles: [thumbs]
     expose:
       - "8090"
     environment:

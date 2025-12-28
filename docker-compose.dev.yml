@@ -69,7 +69,6 @@ services:
 
   thumbnailer:
     build: ./thumbnailer
-    profiles: [thumbs]
     expose:
       - "8090"
     environment:
