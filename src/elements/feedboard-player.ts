@@ -560,10 +560,10 @@ export class FeedboardPlayer extends LitElement {
     const cleanPath = src.startsWith('/') ? src.slice(1) : src
 
     if (serverOverride) {
-      // Use override for both WHEP and HLS
+      // Server override is for WebRTC only, use config for HLS
       return {
         whepUrl: `${serverOverride}/${cleanPath}/whep`,
-        hlsUrl: `${serverOverride}/${cleanPath}/index.m3u8`,
+        hlsUrl: buildHlsUrl(src),
       }
     }
 
@@ -640,6 +640,8 @@ export class FeedboardPlayer extends LitElement {
         this.hlsPlayer.setToken(token)
         this.hlsPlayer.connect()
         this.activeProtocol = 'hls'
+        // For VU meter: capture stream from video element once playing
+        this.setupHlsVuMeter(this.videoElement)
       } else {
         throw new Error('No valid URL for playback')
       }
@@ -661,6 +663,30 @@ export class FeedboardPlayer extends LitElement {
     }
   }
 
+  private setupHlsVuMeter(video: HTMLVideoElement) {
+    // captureStream() requires video to be playing
+    // Listen for play event to capture stream
+    const captureOnPlay = () => {
+      try {
+        // captureStream is not in TypeScript's HTMLVideoElement type
+        const captureStream = (video as any).captureStream as (() => MediaStream) | undefined
+        if (captureStream) {
+          this.currentStream = captureStream.call(video)
+        }
+      } catch (e) {
+        console.warn('[feedboard-player] captureStream not available for VU meter:', e)
+      }
+      video.removeEventListener('playing', captureOnPlay)
+    }
+
+    // If already playing, capture immediately
+    if (!video.paused && !video.ended) {
+      captureOnPlay()
+    } else {
+      video.addEventListener('playing', captureOnPlay)
+    }
+  }
+
   private async connectHls(url: string) {
     try {
       this.status = 'connecting'
@@ -674,6 +700,9 @@ export class FeedboardPlayer extends LitElement {
       this.hlsPlayer = new HlsPlayer(url, this.videoElement)
       this.hlsPlayer.setToken(token)
       this.hlsPlayer.connect()
+      this.activeProtocol = 'hls'
+      // For VU meter: capture stream from video element once playing
+      this.setupHlsVuMeter(this.videoElement)
       this.status = 'playing'
     } catch (error) {
       this.status = 'error'
