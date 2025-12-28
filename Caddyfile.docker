@@ -1,10 +1,8 @@
 # Feedboard production Caddyfile
 #
-# Default: https on port 443 with self-signed cert
-# With domain: DOMAIN=example.com TLS_MODE= docker compose up
+# Set DOMAIN=yourdomain.com for automatic Let's Encrypt HTTPS
 
 {$DOMAIN} {
-	tls {$TLS_MODE}
 
 	# Auth proxy
 	handle /auth/* {
