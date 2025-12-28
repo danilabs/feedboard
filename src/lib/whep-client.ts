@@ -50,6 +50,14 @@ export class WhepClient {
     // Store resource URL for cleanup
     this.resourceUrl = response.headers.get('Location') || null
 
+    // Set up stream to collect tracks
+    const stream = new MediaStream()
+
+    // Listen for tracks before setting remote description
+    this.pc.ontrack = (event) => {
+      stream.addTrack(event.track)
+    }
+
     // Set remote description
     const answerSdp = await response.text()
     await this.pc.setRemoteDescription({
@@ -57,10 +65,9 @@ export class WhepClient {
       sdp: answerSdp,
     })
 
-    // Get the media stream from receivers
-    const stream = new MediaStream()
+    // Also get tracks from receivers (some browsers have them immediately)
     this.pc.getReceivers().forEach((receiver) => {
-      if (receiver.track) {
+      if (receiver.track && !stream.getTracks().includes(receiver.track)) {
         stream.addTrack(receiver.track)
       }
     })

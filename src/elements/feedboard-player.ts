@@ -393,7 +393,7 @@ export class FeedboardPlayer extends LitElement {
   @property({ type: String }) server = ''
   @property({ type: String }) protocol: Protocol = 'auto'
   @property({ type: String }) fit: FitMode = 'contain'
-  @property({ type: Boolean }) muted = false
+  @property({ type: Boolean }) muted = true
   @property({ type: Boolean }) autoplay = true
   @property({ type: Boolean }) controls = false
 
@@ -604,6 +604,9 @@ export class FeedboardPlayer extends LitElement {
         throw new Error('Video element not found')
       }
 
+      // Ensure muted state is set before play() for autoplay to work
+      this.videoElement.muted = this.muted
+
       if (useProtocol === 'whep' && urls.whepUrl) {
         // Get auth token for stream access (if authenticated)
         const token = await getStreamToken()
@@ -664,6 +667,9 @@ export class FeedboardPlayer extends LitElement {
       this.videoElement = this.shadowRoot?.querySelector('video') || null
       if (!this.videoElement) return
 
+      // Ensure muted state is set for autoplay
+      this.videoElement.muted = this.muted
+
       const token = await getStreamToken()
       this.hlsPlayer = new HlsPlayer(url, this.videoElement)
       this.hlsPlayer.setToken(token)
@@ -709,10 +715,20 @@ export class FeedboardPlayer extends LitElement {
     }
   }
 
-  private toggleMute() {
+  private async toggleMute() {
     this.muted = !this.muted
-    if (this.videoElement) {
-      this.videoElement.muted = this.muted
+    // Always query fresh to avoid stale reference
+    const video = this.shadowRoot?.querySelector('video')
+    if (video) {
+      video.muted = this.muted
+      // Safari requires play() after unmuting to enable audio
+      if (!this.muted) {
+        try {
+          await video.play()
+        } catch {
+          // Already playing or blocked
+        }
+      }
     }
   }
 
@@ -779,7 +795,7 @@ export class FeedboardPlayer extends LitElement {
       : `background: ${bg};`
 
     return html`
-      <video data-fit=${this.fit} ?muted=${this.muted} playsinline></video>
+      <video data-fit=${this.fit} ?muted=${this.muted} ?autoplay=${this.autoplay} playsinline></video>
       <div
         class="slate ${showSlate ? '' : 'hidden'} ${this.thumbnailUrl && this.status === 'connecting' ? 'has-thumbnail' : ''}"
         style="${thumbnailStyle} color: ${color};"
