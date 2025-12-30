@@ -322,3 +322,132 @@ func (h *APIHandler) HandleDeletePermission(w http.ResponseWriter, r *http.Reque
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// Preset endpoints
+
+// HandleListPresets handles GET /api/presets
+func (h *APIHandler) HandleListPresets(w http.ResponseWriter, r *http.Request) {
+	presets, err := h.db.ListPresets()
+	if err != nil {
+		log.Printf("List presets error: %v", err)
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if presets == nil {
+		presets = []Preset{}
+	}
+	json.NewEncoder(w).Encode(presets)
+}
+
+// HandleGetPreset handles GET /api/presets/{id}
+func (h *APIHandler) HandleGetPreset(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(mux.Vars(r)["id"], 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid preset ID", http.StatusBadRequest)
+		return
+	}
+
+	preset, err := h.db.GetPresetByID(id)
+	if err != nil {
+		log.Printf("Get preset error: %v", err)
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	if preset == nil {
+		http.Error(w, "Preset not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(preset)
+}
+
+// HandleCreatePreset handles POST /api/presets (admin only)
+func (h *APIHandler) HandleCreatePreset(w http.ResponseWriter, r *http.Request) {
+	currentUser := getUserFromContext(r.Context())
+	if currentUser == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		Name   string          `json:"name"`
+		Config json.RawMessage `json:"config"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Name == "" {
+		http.Error(w, "Name is required", http.StatusBadRequest)
+		return
+	}
+	if len(req.Config) == 0 {
+		http.Error(w, "Config is required", http.StatusBadRequest)
+		return
+	}
+
+	preset, err := h.db.CreatePreset(req.Name, req.Config, currentUser.ID)
+	if err != nil {
+		log.Printf("Create preset error: %v", err)
+		http.Error(w, "Failed to create preset (name may already exist)", http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(preset)
+}
+
+// HandleUpdatePreset handles PUT /api/presets/{id} (admin only)
+func (h *APIHandler) HandleUpdatePreset(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(mux.Vars(r)["id"], 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid preset ID", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Name   string          `json:"name"`
+		Config json.RawMessage `json:"config"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Name == "" {
+		http.Error(w, "Name is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.db.UpdatePreset(id, req.Name, req.Config); err != nil {
+		log.Printf("Update preset error: %v", err)
+		http.Error(w, "Failed to update preset", http.StatusInternalServerError)
+		return
+	}
+
+	preset, _ := h.db.GetPresetByID(id)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(preset)
+}
+
+// HandleDeletePreset handles DELETE /api/presets/{id} (admin only)
+func (h *APIHandler) HandleDeletePreset(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(mux.Vars(r)["id"], 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid preset ID", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.db.DeletePreset(id); err != nil {
+		log.Printf("Delete preset error: %v", err)
+		http.Error(w, "Failed to delete preset", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

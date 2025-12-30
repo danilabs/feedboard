@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -43,6 +44,16 @@ type StreamPermission struct {
 	PathPattern  string `json:"path_pattern"`
 	IsPublic     bool   `json:"is_public"`
 	AllowedRoles string `json:"allowed_roles"` // comma-separated: "viewer,publisher,admin"
+}
+
+// Preset represents a saved layout configuration
+type Preset struct {
+	ID        int64           `json:"id"`
+	Name      string          `json:"name"`
+	Config    json.RawMessage `json:"config"` // {layout: string, cells: SlotConfig[]}
+	CreatedBy int64           `json:"created_by"`
+	CreatedAt time.Time       `json:"created_at"`
+	UpdatedAt time.Time       `json:"updated_at"`
 }
 
 // DB wraps the database connection
@@ -97,6 +108,16 @@ func InitDB(dbPath string) (*DB, error) {
 		allowed_roles TEXT DEFAULT 'viewer,publisher,admin'
 	);
 
+	CREATE TABLE IF NOT EXISTS presets (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT UNIQUE NOT NULL,
+		config TEXT NOT NULL,
+		created_by INTEGER NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_stream_keys_type ON stream_keys(type);
 	CREATE INDEX IF NOT EXISTS idx_stream_keys_owner ON stream_keys(owner_id);
 	`
@@ -113,22 +134,30 @@ func InitDB(dbPath string) (*DB, error) {
 	return &DB{db}, nil
 }
 
-// CreateDefaultAdmin creates the default admin user if no users exist
-func (db *DB) CreateDefaultAdmin() (string, error) {
+// CreateDefaultAdmin creates the default admin user if no users exist.
+// Uses ADMIN_PASSWORD env var if set, otherwise generates a random password.
+// Returns (password, wasGenerated, error).
+func (db *DB) CreateDefaultAdmin() (string, bool, error) {
 	var count int
 	if err := db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count); err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	if count > 0 {
-		return "", nil // Users exist, don't create default
+		return "", false, nil // Users exist, don't create default
 	}
 
-	// Generate random password
-	password := generateSecureToken(12)
+	// Check for env var first
+	password := os.Getenv("ADMIN_PASSWORD")
+	generated := false
+	if password == "" {
+		password = generateSecureToken(12)
+		generated = true
+	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	_, err = db.Exec(
@@ -136,10 +165,10 @@ func (db *DB) CreateDefaultAdmin() (string, error) {
 		"admin", string(hash), "admin",
 	)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 
-	return password, nil
+	return password, generated, nil
 }
 
 // User operations
@@ -405,5 +434,70 @@ func (db *DB) ListStreamPermissions() ([]StreamPermission, error) {
 
 func (db *DB) DeleteStreamPermission(id int64) error {
 	_, err := db.Exec("DELETE FROM stream_permissions WHERE id = ?", id)
+	return err
+}
+
+// Preset operations
+
+func (db *DB) ListPresets() ([]Preset, error) {
+	rows, err := db.Query("SELECT id, name, config, created_by, created_at, updated_at FROM presets ORDER BY name")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var presets []Preset
+	for rows.Next() {
+		var p Preset
+		var config string
+		if err := rows.Scan(&p.ID, &p.Name, &config, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, err
+		}
+		p.Config = json.RawMessage(config)
+		presets = append(presets, p)
+	}
+	return presets, rows.Err()
+}
+
+func (db *DB) GetPresetByID(id int64) (*Preset, error) {
+	p := &Preset{}
+	var config string
+	err := db.QueryRow(
+		"SELECT id, name, config, created_by, created_at, updated_at FROM presets WHERE id = ?",
+		id,
+	).Scan(&p.ID, &p.Name, &config, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	p.Config = json.RawMessage(config)
+	return p, nil
+}
+
+func (db *DB) CreatePreset(name string, config json.RawMessage, createdBy int64) (*Preset, error) {
+	result, err := db.Exec(
+		"INSERT INTO presets (name, config, created_by) VALUES (?, ?, ?)",
+		name, string(config), createdBy,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	id, _ := result.LastInsertId()
+	return db.GetPresetByID(id)
+}
+
+func (db *DB) UpdatePreset(id int64, name string, config json.RawMessage) error {
+	_, err := db.Exec(
+		"UPDATE presets SET name = ?, config = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		name, string(config), id,
+	)
+	return err
+}
+
+func (db *DB) DeletePreset(id int64) error {
+	_, err := db.Exec("DELETE FROM presets WHERE id = ?", id)
 	return err
 }

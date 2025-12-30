@@ -43,6 +43,7 @@ services:
     ports:
       - "127.0.0.1:8091:8091"  # Expose on localhost for mediamtx (host network)
     environment:
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env}
       - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-}
     volumes:

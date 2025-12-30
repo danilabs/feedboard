@@ -44,16 +44,20 @@ func main() {
 	defer db.Close()
 
 	// Create default admin if no users exist
-	if password, err := db.CreateDefaultAdmin(); err != nil {
+	if password, generated, err := db.CreateDefaultAdmin(); err != nil {
 		log.Fatalf("Failed to create default admin: %v", err)
 	} else if password != "" {
 		fmt.Println("=====================================")
 		fmt.Println("  Default admin account created")
 		fmt.Println("=====================================")
 		fmt.Println("  Username: admin")
-		fmt.Printf("  Password: %s\n", password)
-		fmt.Println("=====================================")
-		fmt.Println("  Change this password after login!")
+		if generated {
+			fmt.Printf("  Password: %s\n", password)
+			fmt.Println("=====================================")
+			fmt.Println("  Change this password after login!")
+		} else {
+			fmt.Println("  Password: (from ADMIN_PASSWORD env)")
+		}
 		fmt.Println("=====================================")
 	}
 
@@ -95,6 +99,13 @@ func main() {
 	api.Handle("/permissions", authHandler.RequireAdmin(http.HandlerFunc(apiHandler.HandleListPermissions))).Methods("GET")
 	api.Handle("/permissions", authHandler.RequireAdmin(http.HandlerFunc(apiHandler.HandleSetPermission))).Methods("POST")
 	api.Handle("/permissions/{id:[0-9]+}", authHandler.RequireAdmin(http.HandlerFunc(apiHandler.HandleDeletePermission))).Methods("DELETE")
+
+	// Presets (read: public, write: admin-only)
+	api.HandleFunc("/presets", apiHandler.HandleListPresets).Methods("GET")
+	api.HandleFunc("/presets/{id:[0-9]+}", apiHandler.HandleGetPreset).Methods("GET")
+	api.Handle("/presets", authHandler.RequireAdmin(http.HandlerFunc(apiHandler.HandleCreatePreset))).Methods("POST")
+	api.Handle("/presets/{id:[0-9]+}", authHandler.RequireAdmin(http.HandlerFunc(apiHandler.HandleUpdatePreset))).Methods("PUT")
+	api.Handle("/presets/{id:[0-9]+}", authHandler.RequireAdmin(http.HandlerFunc(apiHandler.HandleDeletePreset))).Methods("DELETE")
 
 	// CORS middleware
 	handler := corsMiddleware(r)

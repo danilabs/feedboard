@@ -8,10 +8,13 @@ import {
   getWebrtcUrl,
   getThumbnailsUrl,
   buildThumbnailUrl,
+  isAuthEnabled,
 } from '@/lib/config'
+import { isAdmin } from '@/lib/auth'
 import { setStreamDragData } from '@/lib/drag-utils'
 import { getThumbnailerClient, type ThumbnailerClient } from '@/lib/thumbnailer-client'
 import { layouts, getLayout, type LayoutTemplate } from '@/lib/layouts'
+import { listPresets, createPreset, updatePreset, deletePreset, type Preset } from '@/lib/presets-api'
 import './feedboard-header'
 import './feedboard-slot'
 import type { SlotConfig } from './feedboard-slot'
@@ -615,6 +618,116 @@ export class FeedboardApp extends LitElement {
       border-radius: 3px;
     }
 
+    /* Presets */
+    .presets-section {
+      border-bottom: 1px solid #1e1e1e;
+    }
+
+    .preset-list {
+      padding: 0.5rem;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .preset-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      margin-bottom: 4px;
+      border-radius: 6px;
+      transition: all 0.15s;
+      background: #161616;
+      border: 1px solid #222;
+      cursor: pointer;
+    }
+
+    .preset-item:hover {
+      background: #1c1c1c;
+      border-color: #333;
+    }
+
+    .preset-item.active {
+      background: #1e3a5f;
+      border-color: #2563eb;
+    }
+
+    .preset-name {
+      flex: 1;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: #ccc;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .preset-item.active .preset-name {
+      color: #93c5fd;
+    }
+
+    .preset-delete {
+      padding: 0.2rem 0.4rem;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: #555;
+      cursor: pointer;
+      font-size: 0.6rem;
+      font-weight: 500;
+      transition: all 0.15s;
+      opacity: 0;
+    }
+
+    .preset-item:hover .preset-delete {
+      opacity: 1;
+    }
+
+    .preset-delete:hover {
+      background: rgba(220, 38, 38, 0.2);
+      border-color: #7f1d1d;
+      color: #f87171;
+    }
+
+    .preset-empty {
+      padding: 0.75rem;
+      text-align: center;
+      color: #444;
+      font-size: 0.7rem;
+    }
+
+    .preset-save-section {
+      padding: 0.625rem;
+      background: #0d0d0d;
+    }
+
+    .preset-save-label {
+      font-size: 0.65rem;
+      color: #555;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .preset-save-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .preset-save-row input {
+      width: 100%;
+      padding: 0.75rem;
+      font-size: 0.875rem;
+      box-sizing: border-box;
+    }
+
+    .preset-save-row button {
+      width: 100%;
+      padding: 0.625rem 0.75rem;
+      font-size: 0.8rem;
+    }
+
     /* Floating open button */
     .open-btn {
       position: absolute;
@@ -844,6 +957,9 @@ export class FeedboardApp extends LitElement {
   @state() private thumbnails: Map<string, string> = new Map()
   @state() private thumbnailerConnected = false
   @state() private showThumbs = true
+  @state() private presets: Preset[] = []
+  @state() private presetName = ''
+  @state() private activePresetId: number | null = null
 
   private client: MediaMTXClient | null = null
   private thumbnailerClient: ThumbnailerClient | null = null
@@ -893,6 +1009,7 @@ export class FeedboardApp extends LitElement {
     this.initClient()
     this.initThumbnailer()
     this.fetchStreams()
+    this.fetchPresets()
 
     // Poll for stream updates every 5 seconds
     this.pollInterval = window.setInterval(() => this.fetchStreams(), 5000)
@@ -958,6 +1075,8 @@ export class FeedboardApp extends LitElement {
     localStorage.removeItem(this.storageKey)
     this.initCells()
     this.selectedCell = null
+    this.activePresetId = null
+    this.presetName = ''
   }
 
   disconnectedCallback() {
@@ -1235,6 +1354,56 @@ export class FeedboardApp extends LitElement {
       console.error('Failed to fetch streams:', error)
     } finally {
       this.loading = false
+    }
+  }
+
+  private async fetchPresets() {
+    if (!isAuthEnabled()) return
+    this.presets = await listPresets()
+  }
+
+  private loadPreset(preset: Preset) {
+    const { layout, cells } = preset.config
+    if (layout) this.layout = layout
+    if (cells) this.cells = cells
+    this.activePresetId = preset.id
+    this.presetName = preset.name
+    this.saveState()
+  }
+
+  private async saveAsPreset() {
+    const name = this.presetName.trim()
+    if (!name) return
+
+    const config = { layout: this.layout, cells: this.cells }
+
+    // Check if preset with this name exists - update it
+    const existing = this.presets.find((p) => p.name === name)
+    if (existing) {
+      const updated = await updatePreset(existing.id, name, config)
+      if (updated) {
+        this.presets = this.presets.map((p) => (p.id === existing.id ? updated : p))
+        this.activePresetId = updated.id
+      }
+      return
+    }
+
+    // Create new preset
+    const preset = await createPreset(name, config)
+    if (preset) {
+      this.presets = [...this.presets, preset]
+      this.activePresetId = preset.id
+    }
+  }
+
+  private async removePreset(id: number, e: Event) {
+    e.stopPropagation()
+    if (await deletePreset(id)) {
+      this.presets = this.presets.filter((p) => p.id !== id)
+      if (this.activePresetId === id) {
+        this.activePresetId = null
+        this.presetName = ''
+      }
     }
   }
 
@@ -1693,6 +1862,53 @@ export class FeedboardApp extends LitElement {
             Add YouTube
           </button>
         </div>
+
+        ${this.presets.length > 0 || isAdmin() ? html`
+          <div class="presets-section">
+            <div class="section-header">Presets</div>
+            <div class="preset-list">
+              ${this.presets.length > 0 ? this.presets.map((preset) => html`
+                <div
+                  class="preset-item ${this.activePresetId === preset.id ? 'active' : ''}"
+                  @click=${() => this.loadPreset(preset)}
+                  title="Click to load"
+                >
+                  <span class="preset-name">${preset.name}</span>
+                  ${isAdmin() ? html`
+                    <button
+                      class="preset-delete"
+                      @click=${(e: Event) => this.removePreset(preset.id, e)}
+                      title="Delete preset"
+                    >Delete</button>
+                  ` : ''}
+                </div>
+              `) : html`
+                <div class="preset-empty">No presets saved yet</div>
+              `}
+            </div>
+            ${isAdmin() ? html`
+              <div class="preset-save-section">
+                <div class="preset-save-label">Save Current Layout</div>
+                <div class="preset-save-row">
+                  <input
+                    type="text"
+                    class="label-input"
+                    placeholder="Enter preset name..."
+                    .value=${this.presetName}
+                    @input=${(e: Event) => (this.presetName = (e.target as HTMLInputElement).value)}
+                    @keydown=${(e: KeyboardEvent) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        this.saveAsPreset()
+                      }
+                    }}
+                  />
+                  <button class="add-clock-btn" @click=${() => this.saveAsPreset()}>Save New</button>
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
 
         <div class="shortcuts ${this.showShortcuts ? 'open' : ''}">
           <button class="shortcuts-toggle" @click=${() => this.showShortcuts = !this.showShortcuts}>

@@ -60,6 +60,7 @@ services:
     expose:
       - "8091"
     environment:
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
       - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
       - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-dev-thumbnailer-token}
     volumes:
