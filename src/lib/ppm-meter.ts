@@ -31,16 +31,9 @@ export class PPMMeter {
   }
 
   /**
-   * Connect to a MediaStream and start metering
+   * Initialize AudioContext and register worklet
    */
-  async connect(stream: MediaStream): Promise<void> {
-    // Check for audio tracks
-    const audioTracks = stream.getAudioTracks()
-    if (audioTracks.length === 0) return
-
-    this.stream = stream
-
-    // Create audio context
+  private async initContext(): Promise<AudioContext | null> {
     this.audioContext = new AudioContext()
 
     // Check if AudioWorklet is available (requires secure context: HTTPS or localhost)
@@ -48,7 +41,7 @@ export class PPMMeter {
       console.warn('[PPMMeter] AudioWorklet not available - requires HTTPS or localhost')
       this.audioContext.close()
       this.audioContext = null
-      return
+      return null
     }
 
     // Create worklet URL once
@@ -62,8 +55,15 @@ export class PPMMeter {
       registeredContexts.add(this.audioContext)
     }
 
-    // Create nodes
-    this.sourceNode = this.audioContext.createMediaStreamSource(stream)
+    return this.audioContext
+  }
+
+  /**
+   * Set up worklet node and message handler
+   */
+  private setupWorkletNode(): void {
+    if (!this.audioContext || !this.sourceNode) return
+
     this.workletNode = new AudioWorkletNode(this.audioContext, 'ppm-meter-processor')
 
     // Listen for meter data
@@ -73,13 +73,33 @@ export class PPMMeter {
       }
     }
 
-    // Connect: source -> worklet (worklet doesn't output, just measures)
+    // Connect source -> worklet
     this.sourceNode.connect(this.workletNode)
+  }
+
+  /**
+   * Connect to a MediaStream and start metering
+   * Returns true on success, false on failure
+   */
+  async connect(stream: MediaStream): Promise<boolean> {
+    // Check for audio tracks
+    const audioTracks = stream.getAudioTracks()
+    if (audioTracks.length === 0) return false
+
+    this.stream = stream
+
+    const ctx = await this.initContext()
+    if (!ctx) return false
+
+    // Create source from stream
+    this.sourceNode = ctx.createMediaStreamSource(stream)
+    this.setupWorkletNode()
 
     // Resume context if suspended (autoplay policy)
-    if (this.audioContext.state === 'suspended') {
-      await this.audioContext.resume()
+    if (ctx.state === 'suspended') {
+      await ctx.resume()
     }
+    return true
   }
 
   /**
@@ -93,15 +113,15 @@ export class PPMMeter {
    * Disconnect and clean up
    */
   disconnect(): void {
-    if (this.sourceNode) {
-      this.sourceNode.disconnect()
-      this.sourceNode = null
-    }
-
     if (this.workletNode) {
       this.workletNode.disconnect()
       this.workletNode.port.onmessage = null
       this.workletNode = null
+    }
+
+    if (this.sourceNode) {
+      this.sourceNode.disconnect()
+      this.sourceNode = null
     }
 
     if (this.audioContext) {

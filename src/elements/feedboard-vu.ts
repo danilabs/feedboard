@@ -130,18 +130,16 @@ export class FeedboardVu extends LitElement {
     this.stopMeter()
     this.needsRetry = false
 
-    if (!this.stream) {
+    if (this.stream) {
+      const audioTracks = this.stream.getAudioTracks()
+      if (audioTracks.length === 0) {
+        this.meterData = null
+        return
+      }
+      await this.tryConnect()
+    } else {
       this.meterData = null
-      return
     }
-
-    const audioTracks = this.stream.getAudioTracks()
-    if (audioTracks.length === 0) {
-      this.meterData = null
-      return
-    }
-
-    await this.tryConnect()
   }
 
   private async tryConnect() {
@@ -153,12 +151,24 @@ export class FeedboardVu extends LitElement {
           this.meterData = data
         }
       })
-      await this.ppmMeter.connect(this.stream)
-      this.needsRetry = false
-    } catch (e) {
-      console.warn('[feedboard-vu] Could not start meter, will retry on user gesture:', e)
-      this.needsRetry = true
+
+      const success = await this.ppmMeter.connect(this.stream)
+
+      if (success) {
+        this.needsRetry = false
+      } else {
+        this.handleFailure()
+      }
+    } catch {
+      this.handleFailure()
     }
+  }
+
+  private handleFailure() {
+    this.needsRetry = false
+    this.stopMeter()
+    // Notify parent that VU meter failed - it should disable showVu
+    this.dispatchEvent(new CustomEvent('vu-failed', { bubbles: true, composed: true }))
   }
 
   private stopMeter() {

@@ -1,9 +1,13 @@
 import Hls from 'hls.js'
 
+// Detect Safari to prefer native HLS playback
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
+
 export class HlsPlayer {
   private hls: Hls | null = null
   private token: string | null = null
   public onError: ((error: string) => void) | null = null
+  public usingNative = false
 
   constructor(
     private url: string,
@@ -16,9 +20,11 @@ export class HlsPlayer {
   }
 
   connect(): void {
-    console.log('[HLS] Connecting to:', this.url)
+    // Safari: prefer native HLS for better Web Audio compatibility
+    const canPlayNative = this.videoElement.canPlayType('application/vnd.apple.mpegurl')
+    const useNative = isSafari && canPlayNative
 
-    if (Hls.isSupported()) {
+    if (!useNative && Hls.isSupported()) {
       const config: Partial<Hls['config']> = {
         enableWorker: true,
         lowLatencyMode: true,
@@ -37,7 +43,6 @@ export class HlsPlayer {
       this.hls.attachMedia(this.videoElement)
 
       this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        console.log('[HLS] Manifest parsed, playing')
         this.videoElement.play().catch(() => {})
       })
 
@@ -61,8 +66,9 @@ export class HlsPlayer {
           }
         }
       })
-    } else if (this.videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+    } else if (canPlayNative) {
       // Native HLS support (Safari) - append JWT to URL
+      this.usingNative = true
       const urlWithToken = this.token
         ? `${this.url}${this.url.includes('?') ? '&' : '?'}jwt=${this.token}`
         : this.url

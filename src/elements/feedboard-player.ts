@@ -3,7 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js'
 import { WhepClient } from '@/lib/whep-client'
 import { HlsPlayer } from '@/lib/hls-player'
 import { icons } from '@/lib/icons'
-import { getWebrtcUrl, getHlsUrl, buildWhepUrl, buildHlsUrl, buildThumbnailUrl, getStreamToken } from '@/lib/config'
+import { buildWhepUrl, buildHlsUrl, buildThumbnailUrl, getStreamToken } from '@/lib/config'
 import './feedboard-vu'
 
 type Protocol = 'auto' | 'whep' | 'hls'
@@ -417,9 +417,12 @@ export class FeedboardPlayer extends LitElement {
   @property({ type: String }) label = ''
   @property({ type: Boolean, attribute: 'show-label' }) showLabel = false
 
-  // VU meter properties
-  @property({ type: Boolean, attribute: 'show-vu' }) showVu = false
+  // VU meter properties - on by default, auto-disables if AudioContext fails
+  @property({ type: Boolean, attribute: 'show-vu' }) showVu = true
   @state() private currentStream: MediaStream | null = null
+  // For HLS VU: AudioContext to extract stream from video element
+  private hlsAudioContext: AudioContext | null = null
+  private hlsSourceNode: MediaElementAudioSourceNode | null = null
 
   // Stream stats
   @state() private streamStats: {
@@ -440,13 +443,20 @@ export class FeedboardPlayer extends LitElement {
 
   connectedCallback() {
     super.connectedCallback()
+    // Listen for VU meter failure - auto-disable if AudioContext fails
+    this.addEventListener('vu-failed', this.handleVuFailed)
     if (this.src && this.autoplay) {
       this.updateComplete.then(() => this.connect())
     }
   }
 
+  private handleVuFailed = () => {
+    this.showVu = false
+  }
+
   disconnectedCallback() {
     super.disconnectedCallback()
+    this.removeEventListener('vu-failed', this.handleVuFailed)
     this.disconnect()
     this.stopStatsPolling()
   }
@@ -664,17 +674,35 @@ export class FeedboardPlayer extends LitElement {
   }
 
   private setupHlsVuMeter(video: HTMLVideoElement) {
-    // captureStream() requires video to be playing
-    // Listen for play event to capture stream
+    // Wait for video to be playing before capturing audio
     const captureOnPlay = () => {
       try {
-        // captureStream is not in TypeScript's HTMLVideoElement type
+        // Try captureStream() first (Chrome/Firefox)
         const captureStream = (video as any).captureStream as (() => MediaStream) | undefined
         if (captureStream) {
-          this.currentStream = captureStream.call(video)
+          const stream = captureStream.call(video)
+          if (stream.getAudioTracks().length > 0) {
+            this.currentStream = stream
+            video.removeEventListener('playing', captureOnPlay)
+            return
+          }
         }
+
+        // Fallback: createMediaElementSource + MediaStreamDestinationNode (Safari)
+        // This requires same-origin HLS to work properly
+        this.hlsAudioContext = new AudioContext()
+        this.hlsSourceNode = this.hlsAudioContext.createMediaElementSource(video)
+
+        // Route audio to speakers (createMediaElementSource captures audio output)
+        this.hlsSourceNode.connect(this.hlsAudioContext.destination)
+
+        // Also route to a MediaStreamDestinationNode for VU metering
+        const streamDest = this.hlsAudioContext.createMediaStreamDestination()
+        this.hlsSourceNode.connect(streamDest)
+        this.currentStream = streamDest.stream
       } catch (e) {
-        console.warn('[feedboard-player] captureStream not available for VU meter:', e)
+        console.warn('[Player] HLS VU meter setup failed:', e)
+        this.currentStream = null
       }
       video.removeEventListener('playing', captureOnPlay)
     }
@@ -712,6 +740,16 @@ export class FeedboardPlayer extends LitElement {
 
   disconnect() {
     this.currentStream = null
+    this.stopStatsPolling()
+    // Clean up HLS audio context used for VU metering
+    if (this.hlsSourceNode) {
+      this.hlsSourceNode.disconnect()
+      this.hlsSourceNode = null
+    }
+    if (this.hlsAudioContext) {
+      this.hlsAudioContext.close()
+      this.hlsAudioContext = null
+    }
     if (this.whepClient) {
       this.whepClient.disconnect()
       this.whepClient = null
@@ -724,6 +762,7 @@ export class FeedboardPlayer extends LitElement {
       this.videoElement.srcObject = null
       this.videoElement.src = ''
     }
+    this.videoElement = null
     this.status = 'idle'
     this.activeProtocol = null
   }
