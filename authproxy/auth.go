@@ -125,23 +125,39 @@ func (h *AuthHandler) HandleMe(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleToken handles GET /auth/token - returns JWT for stream authentication
+// Also used by Caddy forward_auth (reads X-Auth-Token header)
 func (h *AuthHandler) HandleToken(w http.ResponseWriter, r *http.Request) {
-	user := getUserFromContext(r.Context())
-	if user == nil {
-		http.Error(w, "Not authenticated", http.StatusUnauthorized)
+	// 1. Check user auth (cookie or Authorization header)
+	user := h.getUserFromRequest(r)
+	if user != nil {
+		// Create a fresh JWT
+		token, err := h.createToken(user)
+		if err != nil {
+			log.Printf("Token creation error: %v", err)
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("X-Auth-Token", token)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"token": token})
 		return
 	}
 
-	// Create a fresh token
-	token, err := h.createToken(user)
-	if err != nil {
-		log.Printf("Token creation error: %v", err)
-		http.Error(w, "Internal error", http.StatusInternalServerError)
+	// 2. Check for stream token/key in query params (for Caddy forward_auth)
+	query := r.URL.Query()
+	streamToken := query.Get("token")
+	if streamToken == "" {
+		streamToken = query.Get("key")
+	}
+	if streamToken != "" {
+		// Pass stream token through - MediaMTX hook will validate it
+		w.Header().Set("X-Auth-Token", streamToken)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"token": streamToken})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"token": token})
+	http.Error(w, "Not authenticated", http.StatusUnauthorized)
 }
 
 // HandleChangePassword handles POST /auth/password

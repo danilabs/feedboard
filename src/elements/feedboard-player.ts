@@ -645,9 +645,8 @@ export class FeedboardPlayer extends LitElement {
           this.startStatsPolling()
         }
       } else if (urls.hlsUrl) {
-        const token = await getStreamToken()
+        // HLS uses cookies for auth (set by Caddy forward_auth)
         this.hlsPlayer = new HlsPlayer(urls.hlsUrl, this.videoElement)
-        this.hlsPlayer.setToken(token)
         this.hlsPlayer.connect()
         this.activeProtocol = 'hls'
         // For VU meter: capture stream from video element once playing
@@ -724,9 +723,8 @@ export class FeedboardPlayer extends LitElement {
       // Ensure muted state is set for autoplay
       this.videoElement.muted = this.muted
 
-      const token = await getStreamToken()
+      // HLS uses cookies for auth (set by Caddy forward_auth)
       this.hlsPlayer = new HlsPlayer(url, this.videoElement)
-      this.hlsPlayer.setToken(token)
       this.hlsPlayer.connect()
       this.activeProtocol = 'hls'
       // For VU meter: capture stream from video element once playing

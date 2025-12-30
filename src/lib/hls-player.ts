@@ -1,11 +1,7 @@
 import Hls from 'hls.js'
 
-// Detect Safari to prefer native HLS playback
-const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
-
 export class HlsPlayer {
   private hls: Hls | null = null
-  private token: string | null = null
   public onError: ((error: string) => void) | null = null
   public usingNative = false
 
@@ -14,27 +10,16 @@ export class HlsPlayer {
     private videoElement: HTMLVideoElement
   ) {}
 
-  /** Set JWT token for authenticated playback */
-  setToken(token: string | null): void {
-    this.token = token
-  }
-
   connect(): void {
-    // Safari: prefer native HLS for better Web Audio compatibility
-    const canPlayNative = this.videoElement.canPlayType('application/vnd.apple.mpegurl')
-    const useNative = isSafari && canPlayNative
-
-    if (!useNative && Hls.isSupported()) {
+    // Prefer hls.js for cookie-based auth (native HLS doesn't send cookies reliably)
+    if (Hls.isSupported()) {
       const config: Partial<Hls['config']> = {
         enableWorker: true,
         lowLatencyMode: true,
-      }
-
-      // Add JWT auth header if token is set
-      if (this.token) {
-        config.xhrSetup = (xhr: XMLHttpRequest) => {
-          xhr.setRequestHeader('Authorization', `Bearer ${this.token}`)
-        }
+        // Send cookies for authentication
+        xhrSetup: (xhr: XMLHttpRequest) => {
+          xhr.withCredentials = true
+        },
       }
 
       this.hls = new Hls(config)
@@ -66,13 +51,10 @@ export class HlsPlayer {
           }
         }
       })
-    } else if (canPlayNative) {
-      // Native HLS support (Safari) - append JWT to URL
+    } else if (this.videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+      // Fallback to native HLS (Safari without MSE)
       this.usingNative = true
-      const urlWithToken = this.token
-        ? `${this.url}${this.url.includes('?') ? '&' : '?'}jwt=${this.token}`
-        : this.url
-      this.videoElement.src = urlWithToken
+      this.videoElement.src = this.url
       this.videoElement.addEventListener('loadedmetadata', () => {
         this.videoElement.play().catch(() => {})
       })

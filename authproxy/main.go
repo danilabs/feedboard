@@ -69,10 +69,10 @@ func main() {
 	r.HandleFunc("/auth/login", authHandler.HandleLogin).Methods("POST")
 	r.HandleFunc("/auth/logout", authHandler.HandleLogout).Methods("POST")
 	r.HandleFunc("/auth/hook", hookHandler.HandleAuth).Methods("POST")
+	r.HandleFunc("/auth/token", authHandler.HandleToken).Methods("GET") // Also used by Caddy forward_auth
 
 	// Auth endpoints (authenticated)
 	r.Handle("/auth/me", authHandler.RequireAuth(http.HandlerFunc(authHandler.HandleMe))).Methods("GET")
-	r.Handle("/auth/token", authHandler.RequireAuth(http.HandlerFunc(authHandler.HandleToken))).Methods("GET")
 	r.Handle("/auth/password", authHandler.RequireAuth(http.HandlerFunc(authHandler.HandleChangePassword))).Methods("POST")
 
 	// API endpoints (authenticated)

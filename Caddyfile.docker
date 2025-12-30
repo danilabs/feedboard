@@ -44,10 +44,21 @@
 		reverse_proxy {$MTX_HOST}:8889
 	}
 
-	# MediaMTX HLS
-	@hls path_regexp hls ^/.+\.(m3u8|ts)$
+	# MediaMTX HLS and recordings - validate cookie/token, inject JWT
+	@hls path_regexp hls ^/.+\.(m3u8|ts|mp4)$
 	handle @hls {
-		reverse_proxy {$MTX_HOST}:8888
+		header Access-Control-Allow-Origin *
+
+		# Validate auth (cookie or stream token) and get JWT
+		forward_auth authproxy:8091 {
+			uri /auth/token?{http.request.uri.query}
+			copy_headers X-Auth-Token
+		}
+
+		# Pass token to MediaMTX via Authorization header
+		reverse_proxy {$MTX_HOST}:8888 {
+			header_up Authorization "Bearer {http.request.header.X-Auth-Token}"
+		}
 	}
 
 	# Static examples (no SPA fallback)
