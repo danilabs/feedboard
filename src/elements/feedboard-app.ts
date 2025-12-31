@@ -1,0 +1,1979 @@
+import { LitElement, html, css } from 'lit'
+import { customElement, property, state } from 'lit/decorators.js'
+import { MediaMTXClient } from '@/lib/mediamtx-api'
+import type { MediaMTXPath } from '@/types/mediamtx'
+import { icons } from '@/lib/icons'
+import {
+  getApiUrl,
+  getWebrtcUrl,
+  getThumbnailsUrl,
+  buildThumbnailUrl,
+  isAuthEnabled,
+} from '@/lib/config'
+import { isAdmin } from '@/lib/auth'
+import { setStreamDragData } from '@/lib/drag-utils'
+import { getThumbnailerClient, type ThumbnailerClient } from '@/lib/thumbnailer-client'
+import { layouts, getLayout, type LayoutTemplate } from '@/lib/layouts'
+import { listPresets, createPreset, updatePreset, deletePreset, type Preset } from '@/lib/presets-api'
+import './feedboard-header'
+import './feedboard-slot'
+import type { SlotConfig } from './feedboard-slot'
+
+@customElement('feedboard-app')
+export class FeedboardApp extends LitElement {
+  static styles = css`
+    :host {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100vh;
+      background: #0a0a0a;
+      color: #fff;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    .app-body {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .sidebar {
+      width: 280px;
+      background: #111;
+      border-right: 1px solid #1e1e1e;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+      margin-left: -280px;
+      transition: margin-left 0.2s ease;
+      pointer-events: auto;
+      touch-action: auto;
+    }
+
+    .sidebar.visible {
+      margin-left: 0;
+      position: relative;
+      z-index: 100;
+    }
+
+    .sidebar button {
+      pointer-events: auto;
+      cursor: pointer;
+    }
+
+    .sidebar-header {
+      padding: 0.5rem 0.875rem;
+      border-bottom: 1px solid #1e1e1e;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #0d0d0d;
+    }
+
+    .sidebar-title {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #555;
+      letter-spacing: 0.05em;
+    }
+
+    .controls {
+      padding: 0.625rem 0.75rem;
+      border-bottom: 1px solid #1e1e1e;
+      background: #111;
+    }
+
+    .layout-buttons {
+      display: flex;
+      gap: 0.25rem;
+    }
+
+    .layout-btn {
+      flex: 1;
+      padding: 0.375rem;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #666;
+      cursor: pointer;
+      font-size: 0.75rem;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+
+    .layout-btn:hover {
+      background: #222;
+      border-color: #333;
+      color: #999;
+    }
+
+    .layout-btn.active {
+      background: #1e3a5f;
+      border-color: #2563eb;
+      color: #60a5fa;
+    }
+
+    .clear-btn {
+      width: 100%;
+      margin-top: 0.375rem;
+      padding: 0.3rem;
+      background: transparent;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #444;
+      cursor: pointer;
+      font-size: 0.65rem;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+
+    .clear-btn:hover {
+      background: rgba(220, 38, 38, 0.1);
+      border-color: #7f1d1d;
+      color: #f87171;
+    }
+
+    .streams-header {
+      padding: 0.625rem 0.875rem;
+      font-size: 0.6rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #444;
+      letter-spacing: 0.08em;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #0d0d0d;
+    }
+    .streams-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .streams-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.375rem;
+      min-height: 0;
+      scrollbar-width: thin;
+      scrollbar-color: #2a2a2a transparent;
+    }
+
+    .streams-list::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    .streams-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .streams-list::-webkit-scrollbar-thumb {
+      background: #2a2a2a;
+      border-radius: 3px;
+    }
+
+    .streams-list::-webkit-scrollbar-thumb:hover {
+      background: #3a3a3a;
+    }
+
+    .stream-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.625rem;
+      margin-bottom: 2px;
+      border-radius: 6px;
+      cursor: grab;
+      transition: all 0.15s;
+      background: #161616;
+      border: 1px solid transparent;
+    }
+
+    .stream-item:active {
+      cursor: grabbing;
+    }
+
+    .stream-item.has-thumb {
+      flex-wrap: wrap;
+      padding: 0.375rem;
+    }
+
+    .stream-thumb {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #0a0a0a;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 0.25rem;
+    }
+
+    .stream-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      -webkit-user-drag: none;
+      user-drag: none;
+      pointer-events: none;
+    }
+
+    .stream-thumb-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #333;
+      font-size: 0.65rem;
+    }
+
+    .stream-item.has-thumb .stream-info {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      width: 100%;
+    }
+
+    .stream-item:hover {
+      background: #1c1c1c;
+      border-color: #2a2a2a;
+    }
+
+    .stream-item.selected {
+      background: #1e3a5f;
+      border-color: #2563eb;
+    }
+
+    .stream-status {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #333;
+      flex-shrink: 0;
+    }
+
+    .stream-status.ready {
+      background: #22c55e;
+      box-shadow: 0 0 4px rgba(34, 197, 94, 0.4);
+    }
+
+    .stream-name {
+      flex: 1;
+      font-size: 0.775rem;
+      font-weight: 450;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #ccc;
+    }
+
+    .stream-readers {
+      font-size: 0.65rem;
+      color: #444;
+      min-width: 1rem;
+      text-align: right;
+      font-weight: 500;
+    }
+
+    .pop-out-btn {
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      background: transparent;
+      border: none;
+      border-radius: 4px;
+      color: #444;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .pop-out-btn svg {
+      width: 13px;
+      height: 13px;
+    }
+
+    .stream-item:hover .pop-out-btn {
+      opacity: 1;
+    }
+
+    .pop-out-btn:hover {
+      background: #2a2a2a;
+      color: #888;
+    }
+
+    .main-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.625rem 1rem;
+      background: #111;
+      border-bottom: 1px solid #1e1e1e;
+      height: 0;
+      padding: 0;
+      overflow: hidden;
+      opacity: 0;
+      transition: all 0.2s ease;
+    }
+
+    .toolbar.visible {
+      height: auto;
+      padding: 0.625rem 1rem;
+      opacity: 1;
+      position: relative;
+      z-index: 100;
+    }
+
+    .toolbar span {
+      font-size: 0.7rem;
+      color: #555;
+      font-weight: 500;
+    }
+
+    .toolbar-btn {
+      padding: 0.3rem 0.625rem;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #666;
+      cursor: pointer;
+      font-size: 0.7rem;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+
+    .toolbar-btn:hover {
+      background: #222;
+      border-color: #333;
+      color: #999;
+    }
+
+    .toolbar-btn.active {
+      background: #1e3a5f;
+      border-color: #2563eb;
+      color: #60a5fa;
+    }
+
+    .grid-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      overflow: hidden;
+      min-height: 0;
+      container-type: size;
+    }
+
+    .layout-grid {
+      background: #111;
+      aspect-ratio: 16/9;
+      width: min(100cqw, calc(100cqh * 16 / 9));
+      height: min(100cqh, calc(100cqw * 9 / 16));
+    }
+
+    feedboard-grid {
+      width: 100%;
+      height: 100%;
+    }
+
+    .empty-cell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #111;
+      border: 1px solid #1a1a1a;
+      border-radius: 4px;
+      color: #333;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+
+    .refresh-btn {
+      width: 20px;
+      height: 20px;
+      padding: 0;
+      background: transparent;
+      border: none;
+      border-radius: 4px;
+      color: #333;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+
+    .refresh-btn svg {
+      width: 12px;
+      height: 12px;
+    }
+
+    .refresh-btn:hover {
+      background: #1a1a1a;
+      color: #666;
+    }
+
+    .section-header {
+      padding: 0.625rem 0.875rem;
+      font-size: 0.6rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #444;
+      letter-spacing: 0.08em;
+      border-top: 1px solid #1e1e1e;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #0d0d0d;
+    }
+
+    .sources-list {
+      padding: 0.375rem;
+    }
+
+    .sources-list .stream-item {
+      cursor: pointer;
+      -webkit-user-drag: none;
+    }
+
+    .source-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .source-item:hover {
+      background: #1f1f1f;
+    }
+
+    .source-icon {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.875rem;
+      background: #333;
+      border-radius: 4px;
+    }
+
+    .source-icon.clock { background: #1e3a5f; }
+
+    .source-name {
+      flex: 1;
+      font-size: 0.875rem;
+    }
+
+    .source-desc {
+      font-size: 0.7rem;
+      color: #666;
+    }
+
+    .clock-controls {
+      padding: 0.375rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+
+    .tz-select,
+    .format-select,
+    .label-input {
+      width: 100%;
+      padding: 0.375rem 0.5rem;
+      background: #161616;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #ccc;
+      font-size: 0.7rem;
+      box-sizing: border-box;
+    }
+
+    .tz-select,
+    .format-select {
+      cursor: pointer;
+    }
+
+    .tz-select:hover,
+    .format-select:hover,
+    .label-input:hover {
+      border-color: #3a3a3a;
+    }
+
+    .tz-select:focus,
+    .format-select:focus,
+    .label-input:focus {
+      outline: none;
+      border-color: #2563eb;
+      background: #1a1a1a;
+    }
+
+    .label-input::placeholder {
+      color: #444;
+    }
+
+    .add-clock-btn {
+      width: 100%;
+      padding: 0.375rem;
+      background: #1e3a5f;
+      border: 1px solid #2563eb;
+      border-radius: 6px;
+      color: #60a5fa;
+      font-size: 0.7rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      box-sizing: border-box;
+    }
+
+    .add-clock-btn:hover {
+      background: #234876;
+      color: #93c5fd;
+    }
+
+    /* Keyboard shortcuts */
+    .shortcuts {
+      padding: 0.5rem 0.625rem;
+      border-top: 1px solid #1e1e1e;
+      margin-top: auto;
+      background: #0d0d0d;
+    }
+
+    .shortcuts-toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: none;
+      border: none;
+      color: #444;
+      font-size: 0.6rem;
+      cursor: pointer;
+      padding: 0;
+      width: 100%;
+      transition: color 0.15s;
+    }
+
+    .shortcuts-toggle:hover {
+      color: #666;
+    }
+
+    .shortcuts-toggle::before {
+      content: '?';
+      width: 16px;
+      height: 16px;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.6rem;
+      font-weight: 600;
+      color: #555;
+    }
+
+    .shortcuts-list {
+      display: none;
+      padding-top: 0.5rem;
+    }
+
+    .shortcuts.open .shortcuts-list {
+      display: block;
+    }
+
+    .shortcut-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.6rem;
+      color: #444;
+      padding: 0.125rem 0;
+    }
+
+    .shortcut-key {
+      color: #666;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 0.55rem;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      padding: 0.1rem 0.35rem;
+      border-radius: 3px;
+    }
+
+    /* Presets */
+    .presets-section {
+      border-bottom: 1px solid #1e1e1e;
+    }
+
+    .preset-list {
+      padding: 0.5rem;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .preset-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      margin-bottom: 4px;
+      border-radius: 6px;
+      transition: all 0.15s;
+      background: #161616;
+      border: 1px solid #222;
+      cursor: pointer;
+    }
+
+    .preset-item:hover {
+      background: #1c1c1c;
+      border-color: #333;
+    }
+
+    .preset-item.active {
+      background: #1e3a5f;
+      border-color: #2563eb;
+    }
+
+    .preset-name {
+      flex: 1;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: #ccc;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .preset-item.active .preset-name {
+      color: #93c5fd;
+    }
+
+    .preset-delete {
+      padding: 0.2rem 0.4rem;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: #555;
+      cursor: pointer;
+      font-size: 0.6rem;
+      font-weight: 500;
+      transition: all 0.15s;
+      opacity: 0;
+    }
+
+    .preset-item:hover .preset-delete {
+      opacity: 1;
+    }
+
+    .preset-delete:hover {
+      background: rgba(220, 38, 38, 0.2);
+      border-color: #7f1d1d;
+      color: #f87171;
+    }
+
+    .preset-empty {
+      padding: 0.75rem;
+      text-align: center;
+      color: #444;
+      font-size: 0.7rem;
+    }
+
+    .preset-save-section {
+      padding: 0.625rem;
+      background: #0d0d0d;
+    }
+
+    .preset-save-label {
+      font-size: 0.65rem;
+      color: #555;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .preset-save-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .preset-save-row input {
+      width: 100%;
+      padding: 0.75rem;
+      font-size: 0.875rem;
+      box-sizing: border-box;
+    }
+
+    .preset-save-row button {
+      width: 100%;
+      padding: 0.625rem 0.75rem;
+      font-size: 0.8rem;
+    }
+
+    /* Floating open button */
+    .open-btn {
+      position: absolute;
+      top: 0.875rem;
+      left: 0.875rem;
+      width: 36px;
+      height: 36px;
+      background: rgba(10, 10, 10, 0.85);
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      color: #666;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      opacity: 0;
+      transform: scale(0.9);
+      transition: all 0.15s;
+      pointer-events: none;
+      backdrop-filter: blur(8px);
+    }
+
+    .open-btn.visible {
+      opacity: 1;
+      transform: scale(1);
+      pointer-events: auto;
+    }
+
+    .open-btn:hover {
+      background: rgba(30, 58, 95, 0.9);
+      border-color: #2563eb;
+      color: #60a5fa;
+    }
+
+    .open-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* Close button in sidebar */
+    .close-btn {
+      width: 26px;
+      height: 26px;
+      background: transparent;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #555;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .close-btn:hover {
+      background: #1a1a1a;
+      border-color: #3a3a3a;
+      color: #888;
+    }
+
+    .close-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* Fullscreen mode */
+    :host(.fullscreen) .grid-container {
+      padding: 0;
+    }
+
+    /* Cell fullscreen */
+    .cell-fullscreen {
+      position: fixed !important;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 200;
+    }
+
+    /* Info overlay */
+    .info-overlay {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+      color: #fff;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 0.7rem;
+      padding: 0.5rem 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      z-index: 10;
+    }
+
+    .info-title {
+      font-weight: 600;
+      font-size: 0.75rem;
+      margin-bottom: 0.125rem;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+      opacity: 0.8;
+    }
+
+    .info-label {
+      color: #aaa;
+    }
+
+    .info-value {
+      color: #fff;
+      text-align: right;
+    }
+
+    .info-select {
+      padding: 0.15rem 0.3rem;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+      color: #fff;
+      font-size: 0.65rem;
+      cursor: pointer;
+    }
+
+    .info-select:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .info-select:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+
+    .info-controls {
+      display: flex;
+      gap: 0.4rem;
+      margin-top: 0.25rem;
+    }
+
+    .info-btn {
+      padding: 0.2rem 0.5rem;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+      color: #ccc;
+      font-size: 0.65rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .info-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+    }
+
+    .info-btn.active {
+      background: rgba(220, 38, 38, 0.8);
+      border-color: #dc2626;
+      color: #fff;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #666;
+      flex-shrink: 0;
+    }
+
+    .status-dot.playing {
+      background: #22c55e;
+      box-shadow: 0 0 6px #22c55e;
+    }
+
+    .status-dot.connecting {
+      background: #eab308;
+      animation: blink 1s infinite;
+    }
+
+    .status-dot.error {
+      background: #dc2626;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .info-title-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .cell-wrapper {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+  `
+
+  @property({ type: String }) server = ''
+  @property({ type: String }) api = ''
+  @property({ type: String, attribute: 'storage-key' }) storageKey = 'feedboard-layout'
+
+  @state() private streams: MediaMTXPath[] = []
+  @state() private layout: string = '2x2'
+  @state() private cells: SlotConfig[] = []
+  @state() private selectedCell: number | null = null
+  @state() private loading = false
+  @state() private isFullscreen = false
+  @state() private fullscreenCell: number | null = null
+  @state() private uiVisible = false
+  @state() private showOpenButton = false
+  @state() private showInfo = false
+  @state() private showLabels = true
+  @state() private showVu = true
+  @state() private showShortcuts = false
+  @state() private thumbnails: Map<string, string> = new Map()
+  @state() private thumbnailerConnected = false
+  @state() private showThumbs = true
+  @state() private presets: Preset[] = []
+  @state() private presetName = ''
+  @state() private activePresetId: number | null = null
+
+  private client: MediaMTXClient | null = null
+  private thumbnailerClient: ThumbnailerClient | null = null
+  private pollInterval: number | null = null
+  private openButtonTimeout: number | null = null
+
+  // Get all IANA timezones from the browser
+  private getTimezones(): string[] {
+    try {
+      return Intl.supportedValuesOf('timeZone')
+    } catch {
+      // Fallback for older browsers
+      return [
+        'UTC',
+        'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+        'Europe/London', 'Europe/Paris', 'Europe/Berlin',
+        'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Singapore',
+        'Australia/Sydney', 'Pacific/Auckland'
+      ]
+    }
+  }
+
+  private formatTimezoneLabel(tz: string): string {
+    // Convert "America/New_York" to "New York" and show current offset
+    const city = tz.split('/').pop()?.replace(/_/g, ' ') || tz
+    try {
+      const now = new Date()
+      const offset = new Intl.DateTimeFormat('en', { timeZone: tz, timeZoneName: 'short' })
+        .formatToParts(now)
+        .find(p => p.type === 'timeZoneName')?.value || ''
+      return `${city} (${offset})`
+    } catch {
+      return city
+    }
+  }
+
+  @state() private selectedTimezone = ''
+  @state() private clockLabel = 'Local'
+  @state() private clockFormat = 'HH:mm:ss'
+  @state() private capturePublishPath = '/webcam'
+  @state() private youtubeUrl = ''
+
+
+  connectedCallback() {
+    super.connectedCallback()
+    this.loadState()
+    this.initClient()
+    this.initThumbnailer()
+    this.fetchStreams()
+    this.fetchPresets()
+
+    // Poll for stream updates every 5 seconds
+    this.pollInterval = window.setInterval(() => this.fetchStreams(), 5000)
+
+    // Event listeners
+    window.addEventListener('keydown', this.handleKeydown)
+    document.addEventListener('fullscreenchange', this.handleFullscreenChange)
+    this.addEventListener('mousemove', this.handleMouseActivity)
+    this.addEventListener('touchstart', this.handleMouseActivity)
+    this.addEventListener('user-gesture', this.handleUserGesture)
+  }
+
+  private initThumbnailer() {
+    if (getThumbnailsUrl() === undefined) return
+
+    this.thumbnailerClient = getThumbnailerClient()
+    this.thumbnailerClient.setThumbnailCallback((stream, dataUrl) => {
+      this.thumbnails = new Map(this.thumbnails).set(stream, dataUrl)
+    })
+    this.thumbnailerClient.setConnectionCallback((connected) => {
+      this.thumbnailerConnected = connected
+      if (!connected) {
+        // Clear thumbnails when disconnected so we fall back to simple UI
+        this.thumbnails = new Map()
+      }
+    })
+    this.thumbnailerClient.connect()
+  }
+
+  private saveState() {
+    try {
+      const state = {
+        layout: this.layout,
+        cells: this.cells,
+      }
+      localStorage.setItem(this.storageKey, JSON.stringify(state))
+    } catch (e) {
+      console.warn('Failed to save layout:', e)
+    }
+  }
+
+  private loadState() {
+    try {
+      const saved = localStorage.getItem(this.storageKey)
+      if (saved) {
+        const state = JSON.parse(saved)
+        if (state.layout) {
+          this.layout = state.layout
+        }
+        if (state.cells && Array.isArray(state.cells)) {
+          this.cells = state.cells
+          return
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load layout:', e)
+    }
+    // Fall back to empty cells if nothing saved
+    this.initCells()
+  }
+
+  private clearState() {
+    localStorage.removeItem(this.storageKey)
+    this.initCells()
+    this.selectedCell = null
+    this.activePresetId = null
+    this.presetName = ''
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback()
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval)
+    }
+    if (this.openButtonTimeout) {
+      clearTimeout(this.openButtonTimeout)
+    }
+    if (this.thumbnailerClient) {
+      this.thumbnailerClient.setThumbnailCallback(null)
+    }
+    window.removeEventListener('keydown', this.handleKeydown)
+    document.removeEventListener('fullscreenchange', this.handleFullscreenChange)
+    this.removeEventListener('mousemove', this.handleMouseActivity)
+    this.removeEventListener('touchstart', this.handleMouseActivity)
+    this.removeEventListener('user-gesture', this.handleUserGesture)
+  }
+
+  private handleFullscreenChange = () => {
+    this.isFullscreen = !!document.fullscreenElement
+    if (this.isFullscreen) {
+      this.classList.add('fullscreen')
+    } else {
+      this.classList.remove('fullscreen')
+      this.fullscreenCell = null
+    }
+  }
+
+  private handleUserGesture = () => {
+    // User clicked play on one video - retry all other players
+    const slots = this.shadowRoot?.querySelectorAll('feedboard-slot') as NodeListOf<any>
+    slots?.forEach((slot) => {
+      slot.retryPlay?.()
+    })
+  }
+
+  private showUI() {
+    this.uiVisible = true
+    this.showOpenButton = false
+    if (this.openButtonTimeout) {
+      clearTimeout(this.openButtonTimeout)
+      this.openButtonTimeout = null
+    }
+  }
+
+  private hideUI() {
+    this.uiVisible = false
+    this.selectedCell = null
+  }
+
+  private handleMouseActivity = () => {
+    // Don't show open button if UI is already visible
+    if (this.uiVisible) return
+
+    // Show the open button
+    this.showOpenButton = true
+
+    // Hide it after 2 seconds of no movement
+    if (this.openButtonTimeout) {
+      clearTimeout(this.openButtonTimeout)
+    }
+    this.openButtonTimeout = window.setTimeout(() => {
+      this.showOpenButton = false
+    }, 2000)
+  }
+
+  private handleKeydown = (e: KeyboardEvent) => {
+    // Ignore shortcuts when typing in inputs (except Escape)
+    // Use composedPath to get actual target inside shadow DOM
+    const target = (e.composedPath()[0] || e.target) as HTMLElement
+    const isInput = target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA'
+
+    // Escape to close UI, exit cell fullscreen, or hide info (works even in inputs)
+    if (e.key === 'Escape') {
+      if (this.fullscreenCell !== null) {
+        this.fullscreenCell = null
+        e.preventDefault()
+        return
+      }
+      if (this.uiVisible) {
+        this.hideUI()
+        e.preventDefault()
+        return
+      }
+    }
+
+    // Skip all other shortcuts when typing in inputs
+    if (isInput) return
+
+    // S to toggle UI
+    if (e.key === 's') {
+      if (this.uiVisible) {
+        this.hideUI()
+      } else {
+        this.showUI()
+      }
+      e.preventDefault()
+      return
+    }
+
+    // Space to show UI (doesn't close)
+    if (e.key === ' ') {
+      if (!this.uiVisible) {
+        this.showUI()
+      }
+      e.preventDefault()
+      return
+    }
+
+    // 0 to deselect and exit cell fullscreen
+    if (e.key === '0') {
+      this.selectedCell = null
+      if (this.fullscreenCell !== null) {
+        this.fullscreenCell = null
+      }
+      e.preventDefault()
+    }
+
+    // Number keys 1-9 to select cells (or switch when in cell fullscreen)
+    if (e.key >= '1' && e.key <= '9') {
+      const cellIndex = parseInt(e.key) - 1
+      const maxCells = this.getGridCellCount()
+      if (cellIndex < maxCells) {
+        this.selectedCell = cellIndex
+        // If viewing a single cell fullscreen, switch to the new cell
+        if (this.fullscreenCell !== null) {
+          this.fullscreenCell = cellIndex
+        }
+      }
+      e.preventDefault()
+    }
+
+    // Enter to fullscreen selected cell
+    if (e.key === 'Enter' && this.selectedCell !== null) {
+      this.toggleCellFullscreen(this.selectedCell)
+      e.preventDefault()
+    }
+
+    // I to toggle info overlay on all cells
+    if (e.key === 'i' && !e.ctrlKey && !e.metaKey) {
+      this.showInfo = !this.showInfo
+      e.preventDefault()
+    }
+
+    // L to toggle labels
+    if (e.key === 'l' && !e.ctrlKey && !e.metaKey) {
+      this.showLabels = !this.showLabels
+      e.preventDefault()
+    }
+
+    // U to toggle VU meters
+    if (e.key === 'u' && !e.ctrlKey && !e.metaKey) {
+      this.showVu = !this.showVu
+      e.preventDefault()
+    }
+
+    // G to cycle grid size
+    if (e.key === 'g' && !e.ctrlKey && !e.metaKey) {
+      const layoutIds = layouts.map((l) => l.id)
+      const currentIndex = layoutIds.indexOf(this.layout)
+      this.setLayout(layoutIds[(currentIndex + 1) % layoutIds.length])
+    }
+
+    // F for fullscreen
+    if (e.key === 'f' && !e.ctrlKey && !e.metaKey) {
+      if (!document.fullscreenElement) {
+        this.requestFullscreen()
+      } else {
+        document.exitFullscreen()
+      }
+    }
+
+    // Arrow keys to navigate cells
+    if (e.key.startsWith('Arrow') && this.selectedCell !== null) {
+      // For grid-based layouts, calculate columns from the layout ID
+      const template = this.getCurrentLayout()
+      let cols = 2 // default
+      if (template.id.includes('x')) {
+        cols = parseInt(template.id.split('x')[1]) || 2
+      } else if (template.id === 'focus') {
+        cols = 2 // Focus layout has 2 columns
+      }
+      let newCell = this.selectedCell
+
+      switch (e.key) {
+        case 'ArrowUp':
+          newCell = this.selectedCell - cols
+          break
+        case 'ArrowDown':
+          newCell = this.selectedCell + cols
+          break
+        case 'ArrowLeft':
+          newCell = this.selectedCell - 1
+          break
+        case 'ArrowRight':
+          newCell = this.selectedCell + 1
+          break
+      }
+
+      if (newCell >= 0 && newCell < this.cells.length) {
+        this.selectedCell = newCell
+        e.preventDefault()
+      }
+    }
+
+    // Delete/Backspace to clear selected cell
+    if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedCell !== null) {
+      this.clearCell(this.selectedCell)
+      e.preventDefault()
+    }
+  }
+
+  private toggleCellFullscreen(index: number) {
+    if (this.fullscreenCell === index) {
+      this.fullscreenCell = null
+    } else {
+      this.fullscreenCell = index
+      // Enter browser fullscreen if not already
+      if (!document.fullscreenElement) {
+        this.requestFullscreen()
+      }
+    }
+  }
+
+  private toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      this.requestFullscreen()
+    } else {
+      document.exitFullscreen()
+    }
+  }
+
+  private getServerUrl(): string {
+    // Attribute override takes precedence
+    if (this.server) return this.server
+    // Use centralized config
+    return getWebrtcUrl()
+  }
+
+  private getApiBaseUrl(): string {
+    // Attribute override takes precedence
+    if (this.api) return this.api
+    // Use centralized config
+    return getApiUrl()
+  }
+
+  private initClient() {
+    this.client = new MediaMTXClient(this.getApiBaseUrl())
+  }
+
+  private initCells() {
+    const count = this.getGridCellCount()
+    this.cells = Array(count)
+      .fill(null)
+      .map(() => ({ type: 'empty' as const }))
+  }
+
+  private getGridCellCount(): number {
+    const template = getLayout(this.layout)
+    return template?.slots.length || 4
+  }
+
+  private getCurrentLayout(): LayoutTemplate {
+    return getLayout(this.layout) || layouts[1] // Default to 2x2
+  }
+
+  private async fetchStreams() {
+    if (!this.client) return
+    this.loading = true
+    try {
+      this.streams = await this.client.listPaths()
+    } catch (error) {
+      console.error('Failed to fetch streams:', error)
+    } finally {
+      this.loading = false
+    }
+  }
+
+  private async fetchPresets() {
+    if (!isAuthEnabled()) return
+    this.presets = await listPresets()
+  }
+
+  private loadPreset(preset: Preset) {
+    const { layout, cells } = preset.config
+    if (layout) this.layout = layout
+    if (cells) this.cells = cells
+    this.activePresetId = preset.id
+    this.presetName = preset.name
+    this.saveState()
+  }
+
+  private async saveAsPreset() {
+    const name = this.presetName.trim()
+    if (!name) return
+
+    const config = { layout: this.layout, cells: this.cells }
+
+    // Check if preset with this name exists - update it
+    const existing = this.presets.find((p) => p.name === name)
+    if (existing) {
+      const updated = await updatePreset(existing.id, name, config)
+      if (updated) {
+        this.presets = this.presets.map((p) => (p.id === existing.id ? updated : p))
+        this.activePresetId = updated.id
+      }
+      return
+    }
+
+    // Create new preset
+    const preset = await createPreset(name, config)
+    if (preset) {
+      this.presets = [...this.presets, preset]
+      this.activePresetId = preset.id
+    }
+  }
+
+  private async removePreset(id: number, e: Event) {
+    e.stopPropagation()
+    if (await deletePreset(id)) {
+      this.presets = this.presets.filter((p) => p.id !== id)
+      if (this.activePresetId === id) {
+        this.activePresetId = null
+        this.presetName = ''
+      }
+    }
+  }
+
+  private setLayout(layout: string) {
+    this.layout = layout
+    this.initCells()
+    this.selectedCell = null
+    this.saveState()
+  }
+
+  private assignStreamToCell(path: string) {
+    if (this.selectedCell === null) {
+      // Find first empty cell
+      const emptyIndex = this.cells.findIndex((c) => c.type === 'empty')
+      if (emptyIndex !== -1) {
+        this.selectedCell = emptyIndex
+      } else {
+        return
+      }
+    }
+
+    const newCells = [...this.cells]
+    newCells[this.selectedCell] = { type: 'stream', src: `/${path}` }
+    this.cells = newCells
+    this.saveState()
+
+    // Move to next cell
+    const nextCell = this.selectedCell + 1
+    if (nextCell < this.cells.length) {
+      this.selectedCell = nextCell
+    } else {
+      this.selectedCell = null
+    }
+  }
+
+  private clearCell(index: number) {
+    const newCells = [...this.cells]
+    newCells[index] = { type: 'empty' }
+    this.cells = newCells
+    this.saveState()
+  }
+
+  // Slot event handlers
+  private handleSlotDrop = (e: CustomEvent<{ path: string; index: number }>) => {
+    const { path, index } = e.detail
+    const newCells = [...this.cells]
+    newCells[index] = { type: 'stream', src: path.startsWith('/') ? path : `/${path}` }
+    this.cells = newCells
+    this.saveState()
+  }
+
+  private handleSlotSelect = (e: CustomEvent<{ index: number }>) => {
+    this.selectedCell = e.detail.index
+  }
+
+  private handleSlotFullscreen = (e: CustomEvent<{ index: number }>) => {
+    this.toggleCellFullscreen(e.detail.index)
+  }
+
+  private handleSlotMove = (e: CustomEvent<{ config: any; sourceIndex: number; targetIndex: number }>) => {
+    const { config, sourceIndex, targetIndex } = e.detail
+
+    // If sourceIndex is -1, it's from another window - just place the config
+    if (sourceIndex === -1 || sourceIndex === undefined) {
+      const newCells = [...this.cells]
+      newCells[targetIndex] = config
+      this.cells = newCells
+      this.saveState()
+      return
+    }
+
+    // Same window - swap the cells
+    const newCells = [...this.cells]
+    const targetConfig = newCells[targetIndex]
+    newCells[targetIndex] = config
+    newCells[sourceIndex] = targetConfig
+    this.cells = newCells
+    this.saveState()
+  }
+
+  private handleTimezoneChange(value: string) {
+    this.selectedTimezone = value
+    if (value === '') {
+      this.clockLabel = 'Local'
+    } else {
+      this.clockLabel = this.formatTimezoneLabel(value)
+    }
+  }
+
+  private addClockToCell() {
+    if (this.selectedCell === null) {
+      const emptyIndex = this.cells.findIndex((c) => c.type === 'empty')
+      if (emptyIndex !== -1) {
+        this.selectedCell = emptyIndex
+      } else {
+        return
+      }
+    }
+
+    const newCells = [...this.cells]
+    newCells[this.selectedCell] = {
+      type: 'clock',
+      timezone: this.selectedTimezone,
+      label: this.clockLabel,
+      format: this.clockFormat,
+      background: '#111',
+      color: '#fff',
+    }
+    this.cells = newCells
+    this.saveState()
+
+    // Move to next cell
+    const nextCell = this.selectedCell + 1
+    if (nextCell < this.cells.length) {
+      this.selectedCell = nextCell
+    } else {
+      this.selectedCell = null
+    }
+  }
+
+  private addCaptureToCell() {
+    if (this.selectedCell === null) {
+      const emptyIndex = this.cells.findIndex((c) => c.type === 'empty')
+      if (emptyIndex !== -1) {
+        this.selectedCell = emptyIndex
+      } else {
+        return
+      }
+    }
+
+    const newCells = [...this.cells]
+    newCells[this.selectedCell] = {
+      type: 'capture',
+      publishPath: '',
+    }
+    this.cells = newCells
+    this.saveState()
+
+    // Move to next cell
+    const nextCell = this.selectedCell + 1
+    if (nextCell < this.cells.length) {
+      this.selectedCell = nextCell
+    } else {
+      this.selectedCell = null
+    }
+  }
+
+  private addYoutubeToCell() {
+    if (!this.youtubeUrl.trim()) return
+
+    if (this.selectedCell === null) {
+      const emptyIndex = this.cells.findIndex((c) => c.type === 'empty')
+      if (emptyIndex !== -1) {
+        this.selectedCell = emptyIndex
+      } else {
+        return
+      }
+    }
+
+    const newCells = [...this.cells]
+    newCells[this.selectedCell] = {
+      type: 'youtube',
+      src: this.youtubeUrl.trim(),
+    }
+    this.cells = newCells
+    this.saveState()
+
+    // Clear input
+    this.youtubeUrl = ''
+
+    // Move to next cell
+    const nextCell = this.selectedCell + 1
+    if (nextCell < this.cells.length) {
+      this.selectedCell = nextCell
+    } else {
+      this.selectedCell = null
+    }
+  }
+
+  private openCaptureWindow() {
+    const server = this.getServerUrl()
+    const url = `/capture.html?server=${encodeURIComponent(server)}`
+    window.open(url, 'feedboard-capture', 'width=500,height=600,resizable=yes')
+  }
+
+  private openStreamWindow(path: string) {
+    const server = this.getServerUrl()
+    const url = `/player.html?server=${encodeURIComponent(server)}&src=${encodeURIComponent('/' + path)}`
+    window.open(url, `feedboard-${path}`, 'width=800,height=500,resizable=yes')
+  }
+
+  private openAnnotateWindow() {
+    const server = this.getServerUrl()
+    const url = `/annotate.html?server=${encodeURIComponent(server)}`
+    window.open(url, 'feedboard-annotate', 'width=900,height=700,resizable=yes')
+  }
+
+  private renderGrid() {
+    const template = this.getCurrentLayout()
+    const containerStyle = `${template.containerStyle} gap: 4px;`
+
+    return html`
+      <div
+        class="layout-grid"
+        style=${containerStyle}
+        @slot-drop=${this.handleSlotDrop}
+        @slot-move=${this.handleSlotMove}
+        @slot-select=${this.handleSlotSelect}
+        @slot-fullscreen=${this.handleSlotFullscreen}
+      >
+        ${template.slots.map((slot, i) => {
+          const slotStyle = slot.gridArea ? `grid-area: ${slot.gridArea};` : ''
+          const isFullscreen = this.fullscreenCell === i
+          return html`
+            <feedboard-slot
+              style=${slotStyle}
+              class=${isFullscreen ? 'fullscreen' : ''}
+              .config=${this.cells[i] || { type: 'empty' }}
+              .index=${i}
+              .selected=${this.selectedCell === i}
+              .server=${this.getServerUrl()}
+              ?show-info=${this.showInfo}
+              ?show-label=${this.showLabels}
+              ?show-vu=${this.showVu}
+            ></feedboard-slot>
+          `
+        })}
+      </div>
+    `
+  }
+
+  private renderInfoOverlay(cell: SlotConfig, index: number) {
+    if (cell.type === 'clock') {
+      return html`
+        <div class="info-overlay">
+          <div class="info-title-row">
+            <div class="status-dot playing"></div>
+            <div class="info-title">${cell.label || 'Clock'}</div>
+          </div>
+          <div class="info-row">
+            <span class="info-label">TZ</span>
+            <span class="info-value">${cell.timezone || 'Local'}</span>
+          </div>
+        </div>
+      `
+    }
+
+    if (cell.type === 'capture') {
+      // Get capture status from the element
+      const capture = this.shadowRoot?.querySelector(`#capture-${index}`) as any
+      const status = capture?.status || 'idle'
+      const statusClass = status === 'live' ? 'playing' : status
+
+      return html`
+        <div class="info-overlay">
+          <div class="info-title-row">
+            <div class="status-dot ${statusClass}"></div>
+            <div class="info-title">Capture</div>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Publish</span>
+            <span class="info-value">${cell.publishPath}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Status</span>
+            <span class="info-value">${status}</span>
+          </div>
+        </div>
+      `
+    }
+
+    return html`
+      <div class="info-overlay">
+        <div class="info-title">${cell.type}</div>
+      </div>
+    `
+  }
+
+  render() {
+    return html`
+      ${this.uiVisible ? html`<feedboard-header page="app"></feedboard-header>` : ''}
+
+      <div class="app-body">
+        <button
+          class="open-btn ${this.showOpenButton && !this.uiVisible ? 'visible' : ''}"
+          @click=${() => this.showUI()}
+          title="Open settings (S)"
+        >${icons.menu}</button>
+
+        <aside class="sidebar ${this.uiVisible ? 'visible' : ''}">
+          <div class="sidebar-header">
+            <span class="sidebar-title">Layout</span>
+            <button class="close-btn" @click=${() => this.hideUI()} @pointerdown=${(e: Event) => { e.stopPropagation(); this.hideUI(); }} title="Close (Esc)">${icons.x}</button>
+          </div>
+
+        <div class="controls">
+          <div class="layout-buttons">
+            ${layouts.map(
+              (l) => html`
+                <button
+                  class="layout-btn ${this.layout === l.id ? 'active' : ''}"
+                  @click=${() => this.setLayout(l.id)}
+                  title=${l.name}
+                >
+                  ${l.name}
+                </button>
+              `
+            )}
+          </div>
+          <button
+            class="clear-btn"
+            @click=${() => this.clearState()}
+            title="Clear all cells and reset layout"
+          >
+            Clear Layout
+          </button>
+        </div>
+
+        <div class="streams-header">
+          <span>Streams (${this.streams.length})</span>
+          <div class="streams-header-actions">
+            ${this.thumbnailerConnected ? html`
+              <button
+                class="refresh-btn ${this.showThumbs ? 'active' : ''}"
+                @click=${() => this.showThumbs = !this.showThumbs}
+                title="${this.showThumbs ? 'Hide thumbnails' : 'Show thumbnails'}"
+              >
+                ${icons.image}
+              </button>
+            ` : ''}
+            <button class="refresh-btn" @click=${() => this.fetchStreams()} title="Refresh streams">
+              ${icons.refresh}
+            </button>
+          </div>
+        </div>
+
+        <div class="streams-list">
+          ${this.streams.map(
+            (stream) => {
+              const liveThumb = this.thumbnails.get(stream.name)
+              const showThumbnails = this.showThumbs && this.thumbnailerConnected && liveThumb
+              const handleDragStart = (e: DragEvent) => {
+                setStreamDragData(e, stream.name)
+              }
+              return showThumbnails ? html`
+              <div
+                class="stream-item has-thumb"
+                draggable="true"
+                @dragstart=${handleDragStart}
+                @click=${() => this.assignStreamToCell(stream.name)}
+              >
+                <div class="stream-thumb">
+                  <img src="${liveThumb}" alt="${stream.name}">
+                </div>
+                <div class="stream-info">
+                  <div class="stream-status ${stream.ready ? 'ready' : ''}"></div>
+                  <span class="stream-name">${stream.name}</span>
+                  <span class="stream-readers">${stream.readers?.length || 0}</span>
+                  <button
+                    class="pop-out-btn"
+                    @click=${(e: Event) => {
+                      e.stopPropagation()
+                      this.openStreamWindow(stream.name)
+                    }}
+                    title="Open in new window"
+                  >${icons.plusSquare}</button>
+                </div>
+              </div>
+            ` : html`
+              <div
+                class="stream-item"
+                draggable="true"
+                @dragstart=${handleDragStart}
+                @click=${() => this.assignStreamToCell(stream.name)}
+              >
+                <div class="stream-status ${stream.ready ? 'ready' : ''}"></div>
+                <span class="stream-name">${stream.name}</span>
+                <span class="stream-readers">${stream.readers?.length || 0}</span>
+                <button
+                  class="pop-out-btn"
+                  @click=${(e: Event) => {
+                    e.stopPropagation()
+                    this.openStreamWindow(stream.name)
+                  }}
+                  title="Open in new window"
+                >${icons.plusSquare}</button>
+              </div>
+            `}
+          )}
+        </div>
+
+        <div class="section-header">Add Clock</div>
+        <div class="clock-controls">
+          <select
+            class="tz-select"
+            @change=${(e: Event) => this.handleTimezoneChange((e.target as HTMLSelectElement).value)}
+          >
+            <option value="" ?selected=${this.selectedTimezone === ''}>Local</option>
+            ${this.getTimezones().map(
+              (tz) => html`<option value=${tz} ?selected=${tz === this.selectedTimezone}>${this.formatTimezoneLabel(tz)}</option>`
+            )}
+          </select>
+          <input
+            type="text"
+            class="label-input"
+            placeholder="Label"
+            .value=${this.clockLabel}
+            @input=${(e: Event) => (this.clockLabel = (e.target as HTMLInputElement).value)}
+          />
+          <select
+            class="format-select"
+            .value=${this.clockFormat}
+            @change=${(e: Event) => (this.clockFormat = (e.target as HTMLSelectElement).value)}
+          >
+            <option value="HH:mm:ss">HH:mm:ss</option>
+            <option value="HH:mm">HH:mm</option>
+            <option value="HH:mm:ss:ff">Timecode</option>
+          </select>
+          <button class="add-clock-btn" @click=${() => this.addClockToCell()}>
+            Add Clock
+          </button>
+        </div>
+
+        <div class="section-header">Capture</div>
+        <div class="sources-list">
+          <div class="stream-item" @click=${() => this.addCaptureToCell()}>
+            <div class="stream-status ready"></div>
+            <span class="stream-name">Camera / Screen</span>
+            <button
+              class="pop-out-btn"
+              @click=${(e: Event) => {
+                e.stopPropagation()
+                this.openCaptureWindow()
+              }}
+              title="Open in new window"
+            >${icons.plusSquare}</button>
+          </div>
+        </div>
+
+        <div class="section-header">YouTube</div>
+        <div class="clock-controls">
+          <input
+            type="text"
+            class="label-input"
+            placeholder="Paste YouTube URL"
+            .value=${this.youtubeUrl}
+            @input=${(e: Event) => (this.youtubeUrl = (e.target as HTMLInputElement).value)}
+            @keydown=${(e: KeyboardEvent) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                this.addYoutubeToCell()
+              }
+            }}
+          />
+          <button class="add-clock-btn" @click=${() => this.addYoutubeToCell()}>
+            Add YouTube
+          </button>
+        </div>
+
+        ${this.presets.length > 0 || isAdmin() ? html`
+          <div class="presets-section">
+            <div class="section-header">Presets</div>
+            <div class="preset-list">
+              ${this.presets.length > 0 ? this.presets.map((preset) => html`
+                <div
+                  class="preset-item ${this.activePresetId === preset.id ? 'active' : ''}"
+                  @click=${() => this.loadPreset(preset)}
+                  title="Click to load"
+                >
+                  <span class="preset-name">${preset.name}</span>
+                  ${isAdmin() ? html`
+                    <button
+                      class="preset-delete"
+                      @click=${(e: Event) => this.removePreset(preset.id, e)}
+                      title="Delete preset"
+                    >Delete</button>
+                  ` : ''}
+                </div>
+              `) : html`
+                <div class="preset-empty">No presets saved yet</div>
+              `}
+            </div>
+            ${isAdmin() ? html`
+              <div class="preset-save-section">
+                <div class="preset-save-label">Save Current Layout</div>
+                <div class="preset-save-row">
+                  <input
+                    type="text"
+                    class="label-input"
+                    placeholder="Enter preset name..."
+                    .value=${this.presetName}
+                    @input=${(e: Event) => (this.presetName = (e.target as HTMLInputElement).value)}
+                    @keydown=${(e: KeyboardEvent) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        this.saveAsPreset()
+                      }
+                    }}
+                  />
+                  <button class="add-clock-btn" @click=${() => this.saveAsPreset()}>Save New</button>
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
+
+        <div class="shortcuts ${this.showShortcuts ? 'open' : ''}">
+          <button class="shortcuts-toggle" @click=${() => this.showShortcuts = !this.showShortcuts}>
+            Keyboard shortcuts
+          </button>
+          <div class="shortcuts-list">
+            <div class="shortcut-row"><span>Toggle sidebar</span><span class="shortcut-key">S</span></div>
+            <div class="shortcut-row"><span>Select cell</span><span class="shortcut-key">1-9</span></div>
+            <div class="shortcut-row"><span>Clear cell</span><span class="shortcut-key">Del</span></div>
+            <div class="shortcut-row"><span>Fullscreen cell</span><span class="shortcut-key">Enter</span></div>
+            <div class="shortcut-row"><span>Fullscreen app</span><span class="shortcut-key">F</span></div>
+            <div class="shortcut-row"><span>Toggle labels</span><span class="shortcut-key">L</span></div>
+            <div class="shortcut-row"><span>Toggle VU</span><span class="shortcut-key">U</span></div>
+            <div class="shortcut-row"><span>Toggle info</span><span class="shortcut-key">I</span></div>
+            <div class="shortcut-row"><span>Cycle grid</span><span class="shortcut-key">G</span></div>
+            <div class="shortcut-row"><span>Close</span><span class="shortcut-key">Esc</span></div>
+          </div>
+        </div>
+
+        </aside>
+
+      <main class="main-area">
+        <div class="toolbar ${this.uiVisible ? 'visible' : ''}">
+          <span>Cell ${this.selectedCell !== null ? this.selectedCell + 1 : '-'}</span>
+          <button
+            class="toolbar-btn ${this.showLabels ? 'active' : ''}"
+            @click=${() => this.showLabels = !this.showLabels}
+            title="Toggle labels (L)"
+          >
+            Labels
+          </button>
+          <button
+            class="toolbar-btn ${this.showVu ? 'active' : ''}"
+            @click=${() => this.showVu = !this.showVu}
+            title="Toggle VU meters (U)"
+          >
+            VU
+          </button>
+          <button
+            class="toolbar-btn ${this.showInfo ? 'active' : ''}"
+            @click=${() => this.showInfo = !this.showInfo}
+            title="Toggle info overlay (I)"
+          >
+            Info
+          </button>
+          <button
+            class="toolbar-btn ${this.isFullscreen ? 'active' : ''}"
+            @click=${() => this.toggleFullscreen()}
+            title="Toggle fullscreen (F)"
+          >
+            ${this.isFullscreen ? 'Exit' : 'Fullscreen'}
+          </button>
+        </div>
+
+        <div class="grid-container">
+          ${this.renderGrid()}
+        </div>
+        </main>
+      </div>
+    `
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'feedboard-app': FeedboardApp
+  }
+}

@@ -1,0 +1,75 @@
+# Feedboard Production Stack
+#
+# Usage:
+#   docker compose up -d
+#
+# With custom domain:
+#   DOMAIN=example.com TLS_MODE= docker compose up -d
+#
+# With thumbnailer:
+#   docker compose --profile thumbs up -d
+
+services:
+  feedboard:
+    build: .
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:-:443}
+      - TLS_MODE=${TLS_MODE:-internal}
+      - MTX_HOST=host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./Caddyfile.docker:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - authproxy
+    networks:
+      - feedboard-net
+
+  # MediaMTX runs on host network for optimal WebRTC/UDP performance
+  mediamtx:
+    image: bluenviron/mediamtx:latest-ffmpeg
+    network_mode: host
+    environment:
+      - MTX_AUTHHTTPADDRESS=http://127.0.0.1:8091/auth/hook
+      - MTX_AUTHMETHOD=${AUTH_METHOD:-http}
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+
+  authproxy:
+    build: ./authproxy
+    ports:
+      - "127.0.0.1:8091:8091"  # Expose on localhost for mediamtx (host network)
+    environment:
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env}
+      - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-}
+    volumes:
+      - authproxy_data:/data
+    networks:
+      - feedboard-net
+
+  thumbnailer:
+    build: ./thumbnailer
+    expose:
+      - "8090"
+    environment:
+      - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:?Set THUMBNAILER_TOKEN in .env}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command:
+      - "-mediamtx-api=http://host.docker.internal:9997"
+      - "-mediamtx-rtsp=rtsp://host.docker.internal:8554"
+    networks:
+      - feedboard-net
+
+networks:
+  feedboard-net:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  authproxy_data:

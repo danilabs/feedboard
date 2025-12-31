@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thumbnailer</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #111;
+      color: #fff;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #333;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 500;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.875rem;
+      color: #888;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #f44;
+    }
+
+    .status-dot.connected {
+      background: #4f4;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .stream {
+      background: #1a1a1a;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #333;
+    }
+
+    .stream.not-ready {
+      opacity: 0.5;
+    }
+
+    .stream-thumbnail {
+      aspect-ratio: 16 / 9;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stream-thumbnail img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .stream-thumbnail .placeholder {
+      color: #444;
+      font-size: 0.875rem;
+    }
+
+    .stream-thumbnail .timestamp {
+      position: absolute;
+      bottom: 4px;
+      right: 4px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-family: monospace;
+      color: #aaa;
+    }
+
+    .stream-info {
+      padding: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .stream-details {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .stream-name {
+      font-weight: 500;
+      font-size: 0.875rem;
+    }
+
+    .stream-meta {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .stream-tag {
+      font-size: 0.625rem;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: #2a2a2a;
+      color: #888;
+      text-transform: uppercase;
+      font-weight: 500;
+    }
+
+    .stream-tag.source {
+      background: #1a2a3a;
+      color: #6af;
+    }
+
+    .stream-tag.video {
+      background: #2a1a2a;
+      color: #f6a;
+    }
+
+    .stream-tag.audio {
+      background: #1a2a1a;
+      color: #6fa;
+    }
+
+    .stream-status {
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: #333;
+      color: #888;
+      flex-shrink: 0;
+    }
+
+    .stream-status.ready {
+      background: #143d14;
+      color: #4f4;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #666;
+    }
+
+    .empty-state h2 {
+      font-size: 1.25rem;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+
+    .empty-state p {
+      font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Thumbnailer</h1>
+    <div class="status">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Connecting...</span>
+    </div>
+  </header>
+
+  <div class="grid" id="grid"></div>
+  <div class="empty-state" id="emptyState">
+    <h2>No streams</h2>
+    <p>Waiting for streams from MediaMTX...</p>
+  </div>
+
+  <script>
+    const grid = document.getElementById('grid');
+    const emptyState = document.getElementById('emptyState');
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+
+    // Stream data
+    const streams = new Map();
+
+    // WebSocket connection
+    let ws;
+    let reconnectTimer;
+
+    function connect() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${location.host}/ws`;
+
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        statusDot.classList.add('connected');
+        statusText.textContent = 'Connected';
+        console.log('WebSocket connected');
+      };
+
+      ws.onclose = () => {
+        statusDot.classList.remove('connected');
+        statusText.textContent = 'Disconnected';
+        console.log('WebSocket disconnected, reconnecting...');
+        reconnectTimer = setTimeout(connect, 2000);
+      };
+
+      ws.onerror = (err) => {
+        console.error('WebSocket error:', err);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          handleMessage(msg);
+        } catch (err) {
+          console.error('Failed to parse message:', err);
+        }
+      };
+    }
+
+    function handleMessage(msg) {
+      switch (msg.type) {
+        case 'streams':
+          updateStreamList(msg.streams);
+          break;
+        case 'thumbnail':
+          updateThumbnail(msg);
+          break;
+      }
+    }
+
+    function updateStreamList(streamList) {
+      // Track which streams exist
+      const currentNames = new Set(streamList.map(s => s.name));
+
+      // Remove streams that no longer exist
+      for (const name of streams.keys()) {
+        if (!currentNames.has(name)) {
+          streams.delete(name);
+          const el = document.getElementById(`stream-${name}`);
+          if (el) el.remove();
+        }
+      }
+
+      // Add or update streams
+      for (const stream of streamList) {
+        if (!streams.has(stream.name)) {
+          streams.set(stream.name, { ...stream, thumbnail: null, timestamp: null });
+          createStreamElement(stream.name);
+        } else {
+          const existing = streams.get(stream.name);
+          existing.ready = stream.ready;
+          existing.source = stream.source;
+          existing.tracks = stream.tracks;
+        }
+        updateStreamElement(stream.name);
+      }
+
+      // Show/hide empty state
+      emptyState.style.display = streams.size === 0 ? 'block' : 'none';
+      grid.style.display = streams.size === 0 ? 'none' : 'grid';
+    }
+
+    function updateThumbnail(msg) {
+      const stream = streams.get(msg.stream);
+      if (!stream) return;
+
+      stream.thumbnail = `data:image/jpeg;base64,${msg.data}`;
+      stream.timestamp = msg.timestamp;
+      stream.width = msg.width;
+      stream.height = msg.height;
+
+      updateStreamElement(msg.stream);
+    }
+
+    function createStreamElement(name) {
+      const el = document.createElement('div');
+      el.id = `stream-${name}`;
+      el.className = 'stream';
+      el.innerHTML = `
+        <div class="stream-thumbnail">
+          <span class="placeholder">No thumbnail</span>
+          <img style="display: none;" alt="${name}">
+          <span class="timestamp" style="display: none;"></span>
+        </div>
+        <div class="stream-info">
+          <div class="stream-details">
+            <span class="stream-name">${name}</span>
+            <div class="stream-meta"></div>
+          </div>
+          <span class="stream-status">Offline</span>
+        </div>
+      `;
+      grid.appendChild(el);
+    }
+
+    function updateStreamElement(name) {
+      const stream = streams.get(name);
+      const el = document.getElementById(`stream-${name}`);
+      if (!el || !stream) return;
+
+      // Update ready state
+      el.classList.toggle('not-ready', !stream.ready);
+
+      const statusEl = el.querySelector('.stream-status');
+      statusEl.textContent = stream.ready ? 'Live' : 'Offline';
+      statusEl.classList.toggle('ready', stream.ready);
+
+      // Update meta tags (source type and tracks)
+      const metaEl = el.querySelector('.stream-meta');
+      const tags = [];
+
+      if (stream.source) {
+        const sourceLabel = stream.source.replace('Session', '').replace('Source', '');
+        tags.push(`<span class="stream-tag source">${sourceLabel}</span>`);
+      }
+
+      if (stream.tracks) {
+        for (const track of stream.tracks) {
+          const isVideo = ['H264', 'H265', 'VP8', 'VP9', 'AV1'].includes(track);
+          const isAudio = ['Opus', 'AAC', 'MPEG-4 Audio', 'G711', 'G722'].includes(track);
+          const cls = isVideo ? 'video' : (isAudio ? 'audio' : '');
+          tags.push(`<span class="stream-tag ${cls}">${track}</span>`);
+        }
+      }
+
+      metaEl.innerHTML = tags.join('');
+
+      // Update thumbnail
+      const img = el.querySelector('img');
+      const placeholder = el.querySelector('.placeholder');
+      const timestamp = el.querySelector('.timestamp');
+
+      if (stream.thumbnail) {
+        img.src = stream.thumbnail;
+        img.style.display = 'block';
+        placeholder.style.display = 'none';
+
+        if (stream.timestamp) {
+          const date = new Date(stream.timestamp);
+          timestamp.textContent = date.toLocaleTimeString();
+          timestamp.style.display = 'block';
+        }
+      } else {
+        img.style.display = 'none';
+        placeholder.style.display = 'block';
+        timestamp.style.display = 'none';
+      }
+    }
+
+    // Initial fetch of streams via REST API
+    async function fetchStreams() {
+      try {
+        const res = await fetch('/api/streams');
+        const streamList = await res.json();
+        updateStreamList(streamList);
+
+        // Load existing thumbnails
+        for (const stream of streamList) {
+          if (stream.hasThumbnail) {
+            loadThumbnail(stream.name);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch streams:', err);
+      }
+    }
+
+    async function loadThumbnail(name) {
+      try {
+        const res = await fetch(`/api/streams/${name}/thumbnail.jpg`);
+        if (res.ok) {
+          const blob = await res.blob();
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const stream = streams.get(name);
+            if (stream) {
+              stream.thumbnail = reader.result;
+              stream.timestamp = Date.now();
+              updateStreamElement(name);
+            }
+          };
+          reader.readAsDataURL(blob);
+        }
+      } catch (err) {
+        console.error(`Failed to load thumbnail for ${name}:`, err);
+      }
+    }
+
+    // Start
+    fetchStreams();
+    connect();
+  </script>
+</body>
+</html>

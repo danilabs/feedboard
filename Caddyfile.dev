@@ -1,0 +1,78 @@
+# Feedboard Development Caddyfile
+#
+# Proxies Vite + MediaMTX through single HTTPS port
+#
+# Environment variables:
+#   MTX_HOST         - mediamtx (default) or host.docker.internal
+#   VITE_HOST        - vite (default)
+#   THUMBNAILER_HOST - thumbnailer (default)
+#   AUTH_HOST        - authproxy (default)
+
+:443, localhost {
+	tls internal
+
+	# Auth proxy (when available)
+	handle /auth/* {
+		reverse_proxy {$AUTH_HOST:authproxy}:8091
+	}
+	handle /api/* {
+		reverse_proxy {$AUTH_HOST:authproxy}:8091
+	}
+
+	# Vite source files (must be before HLS to avoid .ts confusion)
+	handle /src/* {
+		reverse_proxy {$VITE_HOST:vite}:5173
+	}
+	handle /@* {
+		reverse_proxy {$VITE_HOST:vite}:5173
+	}
+	handle /node_modules/* {
+		reverse_proxy {$VITE_HOST:vite}:5173
+	}
+
+	# MediaMTX API
+	handle /v3/* {
+		reverse_proxy {$MTX_HOST:mediamtx}:9997
+	}
+
+	# Thumbnailer WebSocket - must come before handle_path
+	@thumbs_ws {
+		path /thumbs/ws
+		header Connection *Upgrade*
+	}
+	handle @thumbs_ws {
+		uri strip_prefix /thumbs
+		reverse_proxy {$THUMBNAILER_HOST:thumbnailer}:8090
+	}
+
+	# Thumbnailer API - handle_path strips /thumbs prefix
+	handle_path /thumbs/* {
+		reverse_proxy {$THUMBNAILER_HOST:thumbnailer}:8090
+	}
+
+	# MediaMTX WebRTC - WHIP/WHEP
+	@whip path */whip
+	handle @whip {
+		reverse_proxy {$MTX_HOST:mediamtx}:8889
+	}
+	@whep path */whep
+	handle @whep {
+		reverse_proxy {$MTX_HOST:mediamtx}:8889
+	}
+
+	# MediaMTX HLS
+	@hls path_regexp hls ^/.+\.(m3u8|ts)$
+	handle @hls {
+		reverse_proxy {$MTX_HOST:mediamtx}:8888
+	}
+
+	# Static examples (bypass SPA routing)
+	handle /examples/* {
+		reverse_proxy {$VITE_HOST:vite}:5173
+	}
+
+	# Vite dev server (default) - handles SPA routes
+	handle {
+		reverse_proxy {$VITE_HOST:vite}:5173
+	}
+}

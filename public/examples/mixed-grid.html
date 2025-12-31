@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Feedboard - Mixed Grid</title>
+  <script type="module" src="../feedboard.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #0a0a0a; }
+  </style>
+</head>
+<body>
+  <feedboard-grid layout="3x3" gap="4px" server="http://localhost:8889">
+    <!-- Video feeds -->
+    <feedboard-player src="/cam1"></feedboard-player>
+    <feedboard-player src="/cam2"></feedboard-player>
+    <feedboard-player src="/cam3"></feedboard-player>
+
+    <!-- Clocks for different locations -->
+    <feedboard-clock
+      timezone="America/Los_Angeles"
+      label="LA"
+      format="HH:mm:ss"
+      background="#1a1a2e"
+      color="#ffd93d"
+    ></feedboard-clock>
+
+    <feedboard-clock
+      timezone="America/New_York"
+      label="NYC"
+      format="HH:mm:ss"
+      background="#1a1a2e"
+      color="#6bcb77"
+    ></feedboard-clock>
+
+    <feedboard-clock
+      timezone="Europe/London"
+      label="LON"
+      format="HH:mm:ss"
+      background="#1a1a2e"
+      color="#4d96ff"
+    ></feedboard-clock>
+
+    <!-- Standby slates -->
+    <feedboard-slate
+      text="STANDBY"
+      background="#222"
+      color="#888"
+    ></feedboard-slate>
+
+    <feedboard-slate
+      text="LIVE"
+      background="#cc0000"
+      color="#fff"
+    ></feedboard-slate>
+
+    <!-- Timecode -->
+    <feedboard-clock
+      label="TC"
+      format="HH:mm:ss:ff"
+      framerate="30"
+      background="#111"
+      color="#0f0"
+    ></feedboard-clock>
+  </feedboard-grid>
+</body>
+</html>

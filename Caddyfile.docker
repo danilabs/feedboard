@@ -1,0 +1,80 @@
+# Feedboard production Caddyfile
+#
+# Set DOMAIN=yourdomain.com for automatic Let's Encrypt HTTPS
+
+{$DOMAIN} {
+
+	# Auth proxy
+	handle /auth/* {
+		reverse_proxy authproxy:8091
+	}
+	handle /api/* {
+		reverse_proxy authproxy:8091
+	}
+
+	# MediaMTX API (host network)
+	handle /v3/* {
+		reverse_proxy {$MTX_HOST}:9997
+	}
+
+	# Thumbnailer WebSocket
+	@thumbs_ws {
+		path /thumbs/ws
+		header Connection *Upgrade*
+	}
+	handle @thumbs_ws {
+		uri strip_prefix /thumbs
+		reverse_proxy thumbnailer:8090
+	}
+
+	# Thumbnailer API
+	handle_path /thumbs/* {
+		reverse_proxy thumbnailer:8090
+	}
+
+	# MediaMTX WebRTC - WHIP/WHEP endpoints
+	# MediaMTX doesn't handle OPTIONS preflight (returns 405), so Caddy handles it
+	@webrtc path */whip */whip/* */whep */whep/*
+	handle @webrtc {
+		@options method OPTIONS
+		handle @options {
+			header Access-Control-Allow-Origin *
+			header Access-Control-Allow-Methods "GET, POST, PATCH, DELETE, OPTIONS"
+			header Access-Control-Allow-Headers "Content-Type, Authorization, If-Match"
+			header Access-Control-Expose-Headers "Location, Link, ETag"
+			header Access-Control-Max-Age "86400"
+			respond 204
+		}
+		reverse_proxy {$MTX_HOST}:8889
+	}
+
+	# MediaMTX HLS and recordings - validate cookie/token, inject JWT
+	@hls path_regexp hls ^/.+\.(m3u8|ts|mp4)$
+	handle @hls {
+		header Access-Control-Allow-Origin *
+
+		# Validate auth (cookie or stream token) and get JWT
+		forward_auth authproxy:8091 {
+			uri /auth/token?{http.request.uri.query}
+			copy_headers X-Auth-Token
+		}
+
+		# Pass token to MediaMTX via Authorization header
+		reverse_proxy {$MTX_HOST}:8888 {
+			header_up Authorization "Bearer {http.request.header.X-Auth-Token}"
+		}
+	}
+
+	# Static examples (no SPA fallback)
+	handle /examples/* {
+		root * /srv
+		file_server
+	}
+
+	# Static files with SPA fallback
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
