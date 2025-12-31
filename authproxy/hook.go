@@ -119,7 +119,6 @@ func (h *HookHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 		if action == "read" {
 			keyType = "playback"
 		}
-
 		key, err := h.db.ValidateStreamKey(req.Password, keyType, path, action)
 		if err != nil {
 			log.Printf("Hook: stream key validation error: %v", err)
@@ -131,7 +130,7 @@ func (h *HookHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 2. Token/key in query string (?token=xxx or ?key=xxx) - for SRT, RTMP, etc.
+	// 3. Token/key in query string (?token=xxx or ?key=xxx) - for SRT, RTMP, etc.
 	if req.Query != "" {
 		token := extractQueryParam(req.Query, "token")
 		if token == "" {
@@ -154,7 +153,7 @@ func (h *HookHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 3. JWT token in query string (?jwt=xxx) - for authenticated users
+	// 4. JWT token in query string (?jwt=xxx) - for authenticated users
 	if req.Query != "" {
 		jwtToken := extractQueryParam(req.Query, "jwt")
 		if jwtToken != "" {

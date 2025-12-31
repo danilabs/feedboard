@@ -33,19 +33,18 @@ export class WhipClient {
     // Wait for ICE gathering
     await this.waitForIceGathering()
 
-    // Build URL with optional JWT token
-    let whipUrl = this.url
+    // Build headers with optional Bearer token (WHIP RFC 9725)
+    const headers: HeadersInit = {
+      'Content-Type': 'application/sdp',
+    }
     if (this.token) {
-      const separator = whipUrl.includes('?') ? '&' : '?'
-      whipUrl = `${whipUrl}${separator}jwt=${encodeURIComponent(this.token)}`
+      headers['Authorization'] = `Bearer ${this.token}`
     }
 
     // Send offer to WHIP endpoint
-    const response = await fetch(whipUrl, {
+    const response = await fetch(this.url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/sdp',
-      },
+      headers,
       body: this.pc.localDescription!.sdp,
     })
 
@@ -95,8 +94,13 @@ export class WhipClient {
       this.pc = null
     }
 
+    // DELETE resource if we have a URL (include Bearer token per WHIP RFC 9725)
     if (this.resourceUrl) {
-      fetch(this.resourceUrl, { method: 'DELETE' }).catch(() => {})
+      const headers: HeadersInit = {}
+      if (this.token) {
+        headers['Authorization'] = `Bearer ${this.token}`
+      }
+      fetch(this.resourceUrl, { method: 'DELETE', headers }).catch(() => {})
       this.resourceUrl = null
     }
   }

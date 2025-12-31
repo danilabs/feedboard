@@ -27,19 +27,18 @@ export class WhepClient {
     // Wait for ICE gathering
     await this.waitForIceGathering()
 
-    // Build URL with optional JWT token
-    let whepUrl = this.url
+    // Build headers with optional Bearer token (WHEP spec 4.8.1)
+    const headers: HeadersInit = {
+      'Content-Type': 'application/sdp',
+    }
     if (this.token) {
-      const separator = whepUrl.includes('?') ? '&' : '?'
-      whepUrl = `${whepUrl}${separator}jwt=${encodeURIComponent(this.token)}`
+      headers['Authorization'] = `Bearer ${this.token}`
     }
 
     // Send offer to WHEP endpoint
-    const response = await fetch(whepUrl, {
+    const response = await fetch(this.url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/sdp',
-      },
+      headers,
       body: this.pc.localDescription!.sdp,
     })
 
@@ -102,9 +101,13 @@ export class WhepClient {
       this.pc = null
     }
 
-    // DELETE resource if we have a URL
+    // DELETE resource if we have a URL (include Bearer token per WHEP spec 4.8.1)
     if (this.resourceUrl) {
-      fetch(this.resourceUrl, { method: 'DELETE' }).catch(() => {})
+      const headers: HeadersInit = {}
+      if (this.token) {
+        headers['Authorization'] = `Bearer ${this.token}`
+      }
+      fetch(this.resourceUrl, { method: 'DELETE', headers }).catch(() => {})
       this.resourceUrl = null
     }
   }

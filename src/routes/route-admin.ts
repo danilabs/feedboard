@@ -709,10 +709,12 @@ export class RouteAdmin extends LitElement {
     const rtmpServer = `rtmp://${host}:1935`
     const rtmpStreamKey = `${path}?key=${k.key}`
     const srtUrl = `srt://${host}:8890?streamid=#!::m=publish,r=${path},u=stream,s=${k.key}`
-    const whipUrl = `https://${host}/${path}/whip?key=${k.key}`
+    const whipUrl = `https://${host}/${path}/whip`
+    const whipUrlLegacy = `https://${host}/${path}/whip?key=${k.key}`
 
     // Playback URLs
-    const whepUrl = `https://${host}/${path}/whep?token=${k.key}`
+    const whepUrl = `https://${host}/${path}/whep`
+    const whepUrlLegacy = `https://${host}/${path}/whep?token=${k.key}`
     const hlsUrl = `https://${host}/${path}/index.m3u8?token=${k.key}`
     const rtspPlayUrl = `rtsp://stream:${k.key}@${host}:8554/${path}`
 
@@ -761,12 +763,24 @@ export class RouteAdmin extends LitElement {
             </div>
 
             <div class="connection-group">
-              <h4>WHIP (WebRTC publish)</h4>
+              <h4>WHIP (WebRTC publish - OBS 30+)</h4>
               <div class="connection-field">
                 <input type="text" readonly .value=${whipUrl}>
                 <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(whipUrl, e.target as HTMLButtonElement)}>Copy</button>
               </div>
-              <p class="connection-note">OBS 30+ or browser-based encoders</p>
+              <p class="connection-note">Server URL</p>
+              <div class="connection-field">
+                <input type="text" readonly .value=${k.key}>
+                <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(k.key, e.target as HTMLButtonElement)}>Copy</button>
+              </div>
+              <p class="connection-note">Bearer Token (paste in OBS "Bearer Token" field)</p>
+              <details style="margin-top: 0.5rem;">
+                <summary style="font-size: 0.7rem; color: #555; cursor: pointer;">Legacy URL (with key in query string)</summary>
+                <div class="connection-field" style="margin-top: 0.5rem;">
+                  <input type="text" readonly .value=${whipUrlLegacy}>
+                  <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(whipUrlLegacy, e.target as HTMLButtonElement)}>Copy</button>
+                </div>
+              </details>
             </div>
           ` : html`
             <div class="connection-group">
@@ -775,7 +789,19 @@ export class RouteAdmin extends LitElement {
                 <input type="text" readonly .value=${whepUrl}>
                 <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(whepUrl, e.target as HTMLButtonElement)}>Copy</button>
               </div>
-              <p class="connection-note">Low latency WebRTC</p>
+              <p class="connection-note">Endpoint URL</p>
+              <div class="connection-field">
+                <input type="text" readonly .value=${k.key}>
+                <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(k.key, e.target as HTMLButtonElement)}>Copy</button>
+              </div>
+              <p class="connection-note">Bearer Token (for Authorization header)</p>
+              <details style="margin-top: 0.5rem;">
+                <summary style="font-size: 0.7rem; color: #555; cursor: pointer;">Legacy URL (with token in query string)</summary>
+                <div class="connection-field" style="margin-top: 0.5rem;">
+                  <input type="text" readonly .value=${whepUrlLegacy}>
+                  <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(whepUrlLegacy, e.target as HTMLButtonElement)}>Copy</button>
+                </div>
+              </details>
             </div>
 
             <div class="connection-group">

@@ -32,15 +32,19 @@
 		reverse_proxy thumbnailer:8090
 	}
 
-	# MediaMTX WebRTC - WHIP endpoints (publish)
-	@whip path */whip
-	handle @whip {
-		reverse_proxy {$MTX_HOST}:8889
-	}
-
-	# MediaMTX WebRTC - WHEP endpoints (playback)
-	@whep path */whep
-	handle @whep {
+	# MediaMTX WebRTC - WHIP/WHEP endpoints
+	# MediaMTX doesn't handle OPTIONS preflight (returns 405), so Caddy handles it
+	@webrtc path */whip */whip/* */whep */whep/*
+	handle @webrtc {
+		@options method OPTIONS
+		handle @options {
+			header Access-Control-Allow-Origin *
+			header Access-Control-Allow-Methods "GET, POST, PATCH, DELETE, OPTIONS"
+			header Access-Control-Allow-Headers "Content-Type, Authorization, If-Match"
+			header Access-Control-Expose-Headers "Location, Link, ETag"
+			header Access-Control-Max-Age "86400"
+			respond 204
+		}
 		reverse_proxy {$MTX_HOST}:8889
 	}
 
