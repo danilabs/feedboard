@@ -29,3 +29,12 @@ coverage
 
 *.tsbuildinfo
 .env
+
+# Go binaries
+authproxy/authproxy
+thumbnailer/thumbnailer
+
+# Data directories
+data/
+authproxy/data/
+thumbnailer/data/
