@@ -45,13 +45,6 @@ func (h *HookHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Hook: action=%s path=%s protocol=%s ip=%s user=%s pass=%v token=%v query=%s",
 		req.Action, req.Path, req.Protocol, req.IP, req.User, req.Password != "", req.Token != "", req.Query)
 
-	// Allow localhost connections without auth (for local testing)
-	if isLocalhost(req.IP) {
-		log.Printf("Hook: allowing localhost connection from %s", req.IP)
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
 	// Allow internal service accounts via token
 	thumbnailerToken := os.Getenv("THUMBNAILER_TOKEN")
 	if thumbnailerToken != "" && req.Password == thumbnailerToken && req.Action == "read" {

@@ -35,6 +35,7 @@ services:
     network_mode: host
     environment:
       - MTX_AUTHHTTPADDRESS=http://127.0.0.1:8091/auth/hook
+      - MTX_AUTHMETHOD=${AUTH_METHOD:-http}
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
 
