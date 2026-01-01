@@ -3,7 +3,7 @@
 # Proxies Vite + MediaMTX through single HTTPS port
 #
 # Environment variables:
-#   MTX_HOST         - mediamtx (default) or host.docker.internal
+#   MTX_HOST         - host.docker.internal (default, MediaMTX on host network)
 #   VITE_HOST        - vite (default)
 #   THUMBNAILER_HOST - thumbnailer (default)
 #   AUTH_HOST        - authproxy (default)
