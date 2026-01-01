@@ -1624,7 +1624,7 @@ export class FeedboardApp extends LitElement {
         @slot-config-change=${this.handleSlotConfigChange}
       >
         ${template.slots.map((slot, i) => {
-          const slotStyle = slot.gridArea ? `grid-area: ${slot.gridArea};` : ''
+          const slotStyle = slot.style || (slot.gridArea ? `grid-area: ${slot.gridArea};` : '')
           const isFullscreen = this.fullscreenCell === i
           return html`
             <feedboard-slot
