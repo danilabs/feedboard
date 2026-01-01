@@ -14,6 +14,8 @@ export interface SlotConfig {
   background?: string
   color?: string
   publishPath?: string
+  muted?: boolean
+  protocol?: 'auto' | 'whep' | 'hls'
 }
 
 @customElement('feedboard-slot')
@@ -212,6 +214,26 @@ export class FeedboardSlot extends LitElement {
     player?.retryPlay?.()
   }
 
+  private handleMutedChange = (e: CustomEvent<{ muted: boolean }>) => {
+    this.dispatchEvent(
+      new CustomEvent('slot-config-change', {
+        detail: { index: this.index, key: 'muted', value: e.detail.muted },
+        bubbles: true,
+        composed: true,
+      })
+    )
+  }
+
+  private handleProtocolChange = (e: CustomEvent<{ protocol: string }>) => {
+    this.dispatchEvent(
+      new CustomEvent('slot-config-change', {
+        detail: { index: this.index, key: 'protocol', value: e.detail.protocol },
+        bubbles: true,
+        composed: true,
+      })
+    )
+  }
+
   private renderContent() {
     const { config } = this
 
@@ -222,9 +244,13 @@ export class FeedboardSlot extends LitElement {
             src=${config.src || ''}
             server=${this.server}
             label=${config.label || ''}
+            protocol=${config.protocol || 'auto'}
+            ?muted=${config.muted !== false}
             ?show-info=${this.showInfo}
             ?show-label=${this.showLabel}
             ?show-vu=${this.showVu}
+            @muted-change=${this.handleMutedChange}
+            @protocol-change=${this.handleProtocolChange}
           ></feedboard-player>
         `
 

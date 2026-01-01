@@ -1459,6 +1459,14 @@ export class FeedboardApp extends LitElement {
     this.selectedCell = e.detail.index
   }
 
+  private handleSlotConfigChange = (e: CustomEvent<{ index: number; key: string; value: any }>) => {
+    const { index, key, value } = e.detail
+    const newCells = [...this.cells]
+    newCells[index] = { ...newCells[index], [key]: value }
+    this.cells = newCells
+    this.saveState()
+  }
+
   private handleSlotFullscreen = (e: CustomEvent<{ index: number }>) => {
     this.toggleCellFullscreen(e.detail.index)
   }
@@ -1613,6 +1621,7 @@ export class FeedboardApp extends LitElement {
         @slot-move=${this.handleSlotMove}
         @slot-select=${this.handleSlotSelect}
         @slot-fullscreen=${this.handleSlotFullscreen}
+        @slot-config-change=${this.handleSlotConfigChange}
       >
         ${template.slots.map((slot, i) => {
           const slotStyle = slot.gridArea ? `grid-area: ${slot.gridArea};` : ''
