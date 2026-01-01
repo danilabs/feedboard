@@ -64,8 +64,8 @@ services:
       - "8091"
     environment:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
-      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
-      - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-dev-thumbnailer-token}
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-in-prod}
+      - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-dev-thumbnailer-token-change-in-prod}
     volumes:
       - authproxy_data:/data
     networks:
@@ -76,7 +76,7 @@ services:
     expose:
       - "8090"
     environment:
-      - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-dev-thumbnailer-token}
+      - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-dev-thumbnailer-token-change-in-prod}
     command:
       - "-mediamtx-api=http://${MTX_HOST:-mediamtx}:9997"
       - "-mediamtx-rtsp=rtsp://${MTX_HOST:-mediamtx}:8554"

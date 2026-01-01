@@ -12,8 +12,11 @@
 		reverse_proxy authproxy:8091
 	}
 
-	# MediaMTX API (host network)
+	# MediaMTX API (host network) - requires auth
 	handle /v3/* {
+		forward_auth authproxy:8091 {
+			uri /auth/me
+		}
 		reverse_proxy {$MTX_HOST}:9997
 	}
 

@@ -24,11 +24,6 @@ docker compose -f docker-compose.dev.yml up
 # Access at https://localhost
 ```
 
-On first run, check the authproxy logs for the generated admin password:
-```bash
-docker compose -f docker-compose.dev.yml logs authproxy | grep Password
-```
-
 ### Local Development (Mac)
 
 For Safari WebRTC compatibility, run MediaMTX locally:
@@ -139,7 +134,7 @@ Stream Key: streampath?key=YOUR_KEY
 
 **SRT:**
 ```
-srt://yourserver:8890?streamid=#!::m=publish,r=streampath,s=YOUR_KEY
+srt://yourserver:8890?streamid=publish:streampath:stream:YOUR_KEY
 ```
 
 ### Components
@@ -243,7 +238,7 @@ ffmpeg -f lavfi -i testsrc=size=1280x720:rate=30 \
        -f flv "rtmp://localhost:1935/test?key=YOUR_STREAM_KEY"
 ```
 
-## Project Structure
+## Project Structuregre
 
 ```
 feedboard/

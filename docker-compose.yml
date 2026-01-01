@@ -46,7 +46,7 @@ services:
     environment:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env}
-      - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-}
+      - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-dev-thumbnailer-token-change-in-prod}
     volumes:
       - authproxy_data:/data
     networks:
@@ -57,7 +57,7 @@ services:
     expose:
       - "8090"
     environment:
-      - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:?Set THUMBNAILER_TOKEN in .env}
+      - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-dev-thumbnailer-token-change-in-prod}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command:

@@ -708,7 +708,7 @@ export class RouteAdmin extends LitElement {
     // Publish URLs
     const rtmpServer = `rtmp://${host}:1935`
     const rtmpStreamKey = `${path}?key=${k.key}`
-    const srtUrl = `srt://${host}:8890?streamid=#!::m=publish,r=${path},u=stream,s=${k.key}`
+    const srtUrl = `srt://${host}:8890?streamid=publish:${path}:stream:${k.key}`
     const whipUrl = `https://${host}/${path}/whip`
     const whipUrlLegacy = `https://${host}/${path}/whip?key=${k.key}`
 
@@ -717,6 +717,7 @@ export class RouteAdmin extends LitElement {
     const whepUrlLegacy = `https://${host}/${path}/whep?token=${k.key}`
     const hlsUrl = `https://${host}/${path}/index.m3u8?token=${k.key}`
     const rtspPlayUrl = `rtsp://stream:${k.key}@${host}:8554/${path}`
+    const srtReadUrl = `srt://${host}:8890?streamid=read:${path}:stream:${k.key}`
 
     return html`
       <div class="modal-overlay" @click=${(e: Event) => e.target === e.currentTarget && (this.showKeyInfoModal = false)}>
@@ -802,6 +803,15 @@ export class RouteAdmin extends LitElement {
                   <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(whepUrlLegacy, e.target as HTMLButtonElement)}>Copy</button>
                 </div>
               </details>
+            </div>
+
+            <div class="connection-group">
+              <h4>SRT (Low latency)</h4>
+              <div class="connection-field">
+                <input type="text" readonly .value=${srtReadUrl}>
+                <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(srtReadUrl, e.target as HTMLButtonElement)}>Copy</button>
+              </div>
+              <p class="connection-note">ffplay, VLC, mpv</p>
             </div>
 
             <div class="connection-group">

@@ -30,8 +30,11 @@
 		reverse_proxy {$VITE_HOST:vite}:5173
 	}
 
-	# MediaMTX API
+	# MediaMTX API - requires auth
 	handle /v3/* {
+		forward_auth {$AUTH_HOST:authproxy}:8091 {
+			uri /auth/me
+		}
 		reverse_proxy {$MTX_HOST:mediamtx}:9997
 	}
 

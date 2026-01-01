@@ -45,10 +45,10 @@ func (h *HookHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Hook: action=%s path=%s protocol=%s ip=%s user=%s pass=%v token=%v query=%s",
 		req.Action, req.Path, req.Protocol, req.IP, req.User, req.Password != "", req.Token != "", req.Query)
 
-	// Allow internal service accounts via token
+	// Allow thumbnailer service account via token (thumbnailer uses user=service)
 	thumbnailerToken := os.Getenv("THUMBNAILER_TOKEN")
-	if thumbnailerToken != "" && req.Password == thumbnailerToken && req.Action == "read" {
-		log.Printf("Hook: allowing service account via token")
+	if thumbnailerToken != "" && req.User == "service" && req.Password == thumbnailerToken && req.Action == "read" {
+		log.Printf("Hook: allowing thumbnailer service account")
 		w.WriteHeader(http.StatusOK)
 		return
 	}
