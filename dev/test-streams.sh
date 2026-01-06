@@ -32,7 +32,8 @@ add_stream() {
   local freq="$3"
 
   # Build the ffmpeg command (no quotes needed around lavfi inputs)
-  local cmd="ffmpeg -re -f lavfi -i ${video} -f lavfi -i sine=frequency=${freq}:sample_rate=48000 -pix_fmt yuv420p -c:v libx264 -preset ultrafast -tune zerolatency -b:v 5000k -c:a aac -b:a 128k -f rtsp rtsp://localhost:\$RTSP_PORT/\$MTX_PATH"
+  # Uses internal service account for authenticated publish
+  local cmd="ffmpeg -re -f lavfi -i ${video} -f lavfi -i sine=frequency=${freq}:sample_rate=48000 -pix_fmt yuv420p -c:v libx264 -preset ultrafast -tune zerolatency -b:v 5000k -c:a aac -b:a 128k -f rtsp rtsp://internal:\$INTERNAL_PUBLISH_TOKEN@localhost:\$RTSP_PORT/\$MTX_PATH"
 
   # Use a heredoc to avoid JSON escaping issues
   curl -s -X POST "${API}/add/${name}" \
