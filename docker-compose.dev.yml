@@ -60,6 +60,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-in-prod}
       - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-dev-thumbnailer-token-change-in-prod}
       - INTERNAL_PUBLISH_TOKEN=${INTERNAL_PUBLISH_TOKEN:-dev-internal-publish-token}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
     volumes:
       - authproxy_data:/data
     networks:
@@ -73,6 +74,7 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-dev-thumbnailer-token-change-in-prod}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
     command:
       - "-mediamtx-api=http://${MTX_HOST:-host.docker.internal}:9997"
       - "-mediamtx-rtsp=rtsp://${MTX_HOST:-host.docker.internal}:8554"

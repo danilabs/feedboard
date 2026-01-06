@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/gorilla/mux"
 )
@@ -117,11 +118,52 @@ func main() {
 	log.Fatal(http.ListenAndServe(addr, handler))
 }
 
-// corsMiddleware adds CORS headers for development
+// corsMiddleware adds CORS headers for development (Vite on different port)
+// Set CORS_ORIGINS env var to enable. Supports:
+//   - "*" to allow all origins
+//   - "*.example.com" for suffix wildcards
+//   - "http://localhost:5173" for exact match
+//   - Comma-separated for multiple patterns
+// Leave empty to disable CORS (production behind reverse proxy)
 func corsMiddleware(next http.Handler) http.Handler {
+	corsOrigins := os.Getenv("CORS_ORIGINS")
+	var allowAll bool
+	var exactOrigins = make(map[string]bool)
+	var wildcardSuffixes []string
+
+	if corsOrigins != "" {
+		for _, pattern := range strings.Split(corsOrigins, ",") {
+			pattern = strings.TrimSpace(pattern)
+			if pattern == "*" {
+				allowAll = true
+			} else if strings.HasPrefix(pattern, "*.") {
+				// *.example.com -> .example.com suffix
+				wildcardSuffixes = append(wildcardSuffixes, pattern[1:])
+			} else {
+				exactOrigins[pattern] = true
+			}
+		}
+		log.Printf("CORS enabled for origins: %s", corsOrigins)
+	}
+
+	isAllowed := func(origin string) bool {
+		if allowAll {
+			return true
+		}
+		if exactOrigins[origin] {
+			return true
+		}
+		for _, suffix := range wildcardSuffixes {
+			if strings.HasSuffix(origin, suffix) {
+				return true
+			}
+		}
+		return false
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin != "" {
+		if origin != "" && isAllowed(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")

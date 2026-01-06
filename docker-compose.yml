@@ -1,13 +1,18 @@
 # Feedboard Production Stack
 #
 # Usage:
+#   cp .env.template .env   # Configure settings
 #   docker compose up -d
 #
-# With custom domain:
-#   DOMAIN=example.com TLS_MODE= docker compose up -d
+# Configuration:
+#   Edit .env to set DOMAIN, TLS_MODE, JWT_SECRET, etc.
+#   See .env.template for all options
 #
-# With thumbnailer:
-#   docker compose --profile thumbs up -d
+# Quick start (self-signed TLS):
+#   docker compose up -d
+#
+# Production (Let's Encrypt):
+#   Set in .env: DOMAIN=example.com
 
 services:
   feedboard:
@@ -17,7 +22,6 @@ services:
       - "443:443"
     environment:
       - DOMAIN=${DOMAIN:-:443}
-      - TLS_MODE=${TLS_MODE:-internal}
       - MTX_HOST=host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -49,6 +53,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env}
       - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-dev-thumbnailer-token-change-in-prod}
       - INTERNAL_PUBLISH_TOKEN=${INTERNAL_PUBLISH_TOKEN:-}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
     volumes:
       - authproxy_data:/data
     networks:
@@ -60,6 +65,7 @@ services:
       - "8090"
     environment:
       - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-dev-thumbnailer-token-change-in-prod}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command:
