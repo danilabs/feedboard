@@ -13,18 +13,6 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       allowedHosts: true,
-      proxy: {
-        '/auth': {
-          target: 'http://localhost:8091',
-          changeOrigin: true,
-          cookieDomainRewrite: '',
-        },
-        '/api': {
-          target: 'http://localhost:8091',
-          changeOrigin: true,
-          cookieDomainRewrite: '',
-        },
-      },
     },
     plugins: [
       {
@@ -50,6 +38,8 @@ export default defineConfig(({ mode }) => {
             formats: ['es'],
           },
           rollupOptions: {
+            // Bundle all dependencies for standalone use
+            external: [],
             output: {
               inlineDynamicImports: true,
             },

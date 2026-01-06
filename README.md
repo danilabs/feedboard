@@ -238,7 +238,7 @@ ffmpeg -f lavfi -i testsrc=size=1280x720:rate=30 \
        -f flv "rtmp://localhost:1935/test?key=YOUR_STREAM_KEY"
 ```
 
-## Project Structuregre
+## Project Structure
 
 ```
 feedboard/
