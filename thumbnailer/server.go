@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -130,8 +131,8 @@ func (s *Server) handleGetThumbnail(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	w.Header().Set("X-Thumbnail-Width", string(rune(thumb.Width)))
-	w.Header().Set("X-Thumbnail-Height", string(rune(thumb.Height)))
+	w.Header().Set("X-Thumbnail-Width", strconv.Itoa(thumb.Width))
+	w.Header().Set("X-Thumbnail-Height", strconv.Itoa(thumb.Height))
 	w.Header().Set("X-Thumbnail-Timestamp", thumb.Timestamp.Format(time.RFC3339))
 	w.Write(thumb.Data)
 }
