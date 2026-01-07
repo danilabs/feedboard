@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -207,14 +208,11 @@ func (h *HookHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Unauthorized", http.StatusUnauthorized)
 }
 
-// extractQueryParam extracts a parameter from a query string
+// extractQueryParam extracts a parameter from a query string (URL-decoded)
 func extractQueryParam(query, param string) string {
-	parts := strings.Split(query, "&")
-	for _, part := range parts {
-		kv := strings.SplitN(part, "=", 2)
-		if len(kv) == 2 && kv[0] == param {
-			return kv[1]
-		}
+	values, err := url.ParseQuery(query)
+	if err != nil {
+		return ""
 	}
-	return ""
+	return values.Get(param)
 }
