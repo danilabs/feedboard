@@ -1,24 +1,27 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="Feedboard" width="120" height="120">
+</p>
+
 # Feedboard
 
-A browser-based video production toolkit for [MediaMTX](https://github.com/bluenviron/mediamtx). Create multiview layouts, capture local sources, and stream via WebRTC - all from the browser.
+A browser-based video production toolkit for [MediaMTX](https://github.com/bluenviron/mediamtx). Create multiview layouts, capture local sources, and stream via WebRTC.
 
 ## Features
 
 - Multi-view grid layouts (1x1 to 4x4, plus custom layouts)
-- WebRTC (WHEP) and HLS playback with automatic fallback
-- Local camera/screen capture with WHIP publishing
+- WebRTC (WHEP) and HLS playback
+- Local camera/screen/tab capture with WHIP publishing
 - Real-time thumbnails via thumbnailer service
 - User authentication with JWT tokens
-- Stream keys for OBS/encoder access
+- Stream keys for RTMP/SRT/webRTC ingress/egres
 - VU meters and stream stats overlay
 - Keyboard shortcuts for fast operation
 
 ## Prerequisites
 
-- **Docker** with Docker Compose (for containerized setup)
-- **Node.js 20+** (for local development)
-- **Caddy** (for local development without Docker)
-- Ports 443, 1935, 8554, 8888, 8889 available
+- **Docker** with Docker Compose
+- **Node.js 20+**
+- **Caddy**
 
 ### macOS Notes
 
@@ -27,21 +30,19 @@ Settings → Features in development → Enable host networking
 
 ## Quick Start
 
-### Docker (Recommended)
+### Docker
 
 ```bash
-# Development
+cp .env.template .env
 docker compose -f docker-compose.dev.yml up
 
 # Access at https://localhost
 ```
 
-### Local Development (Mac)
-
-For Safari WebRTC compatibility, run MediaMTX locally:
+### Local Development
 
 ```bash
-# Terminal 1: MediaMTX (download from https://github.com/bluenviron/mediamtx/releases)
+# Terminal 1: MediaMTX
 ./mediamtx
 
 # Terminal 2: Vite dev server
@@ -54,16 +55,6 @@ caddy run
 
 Access via `https://localhost`
 
-### Docker + Local MediaMTX
-
-Best of both worlds - Docker services with local MediaMTX for WebRTC:
-
-```bash
-MTX_HOST=host.docker.internal docker compose -f docker-compose.dev.yml up
-```
-
-Then run MediaMTX locally in a separate terminal.
-
 ## Architecture
 
 ```
@@ -75,57 +66,47 @@ Browser → Caddy → Feedboard SPA
 
 | Service | Port | Description |
 |---------|------|-------------|
-| Caddy | 443 | Reverse proxy, TLS termination |
-| MediaMTX | 8554, 1935, 8889, 8888, 9997 | RTSP, RTMP, WebRTC, HLS, API |
+| Caddy | 80, 443 | Reverse proxy, TLS |
+| MediaMTX | 1935, 8189, 8554, 8888, 8889, 8890, 9997 | RTMP, WebRTC UDP, RTSP, HLS, WebRTC HTTP, SRT, API |
 | authproxy | 8091 | Authentication, stream keys |
 | thumbnailer | 8090 | Live thumbnail generation |
 
 ## Production Deployment
 
 ```bash
-# Set required secrets
-export JWT_SECRET=$(openssl rand -hex 32)
-export THUMBNAILER_TOKEN=$(openssl rand -hex 32)
-export DOMAIN=yourdomain.com
-
-# Start production stack
+cp .env.template .env
+# Edit .env - see Configuration section for variables
 docker compose up -d
 ```
 
-For local testing with self-signed certs (default):
-```bash
-docker compose up -d
-# Or explicitly: DOMAIN=:443 docker compose up -d
-```
+### AWS EC2 / Cloud Deployment
 
-## Configuration
-
-### MediaMTX Setup
-
-Add to `mediamtx.yml` for authentication hook:
+For WebRTC to work from external clients, MediaMTX needs to advertise a public IP. Edit within `mediamtx.yml`:
 
 ```yaml
-api: yes
-apiAddress: :9997
-
-# Authentication hook
-authMethod: http
-authHTTPAddress: http://localhost:8091/auth/hook
-
-# CORS (if not behind proxy)
-apiAllowOrigin: '*'
-webrtcAllowOrigin: '*'
-hlsAllowOrigin: '*'
+webrtcAdditionalHosts: [YOUR_EC2_PUBLIC_IP]
 ```
+
+Also ensure the security group allows:
+- TCP 80 (HTTP, for Let's Encrypt)
+- TCP 443 (HTTPS)
+- TCP 1935 (RTMP)
+- UDP 8189 (WebRTC)
+- TCP 8554 (RTSP, if needed)
+- UDP 8890 (SRT)
+
+## Configuration
 
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `JWT_SECRET` | Secret for JWT signing | Required in production |
-| `THUMBNAILER_TOKEN` | Service account token | Required for thumbnailer |
+| `JWT_SECRET` | Secret for JWT signing | Required |
+| `THUMBNAILER_TOKEN` | Service account token | Optional |
 | `DOMAIN` | Domain for Let's Encrypt | `:443` (self-signed) |
-| `MTX_HOST` | MediaMTX hostname | `mediamtx` (Docker) |
+| `MTX_HOST` | MediaMTX hostname | `mediamtx` |
+
+Generate secure secrets with: `openssl rand -hex 32`
 
 ## Usage
 
@@ -220,9 +201,7 @@ srt://yourserver:8890?streamid=publish:streampath:stream:YOUR_KEY
 Add test streams to MediaMTX for development:
 
 ```bash
-./dev/test-streams.sh         # Add all test streams
-./dev/test-streams.sh remove  # Remove all test streams
-./dev/test-streams.sh list    # List current paths
+./dev/test-streams.sh
 ```
 
 Available test streams:
@@ -235,6 +214,22 @@ Available test streams:
 | `color_red` | Solid red |
 | `color_green` | Solid green |
 | `color_blue` | Solid blue |
+
+### Play MP4 File
+
+Stream an MP4 file to RTMP (loops forever):
+
+```bash
+./dev/play-mp4.sh video.mp4 streamname
+
+# With stream key
+./dev/play-mp4.sh video.mp4 "mystream?key=YOUR_STREAM_KEY"
+
+# To remote server
+RTMP_SERVER=rtmp://yourserver:1935 ./dev/play-mp4.sh video.mp4 demo
+```
+
+Automatically scales to 1080p and re-encodes for compatibility.
 
 ### Manual FFmpeg Test
 
@@ -267,35 +262,6 @@ feedboard/
 ├── Caddyfile.dev           # Development Caddy config
 └── mediamtx.yml            # MediaMTX configuration
 ```
-
-## Troubleshooting
-
-### Safari WebRTC Issues
-
-Safari has strict WebRTC/ICE requirements. For local development on Mac:
-1. Run MediaMTX locally (not in Docker)
-2. Use `MTX_HOST=host.docker.internal` for Docker services
-3. Or use HLS fallback (higher latency)
-
-### CORS Errors
-
-Ensure MediaMTX has CORS configured:
-```yaml
-apiAllowOrigin: '*'
-webrtcAllowOrigin: '*'
-hlsAllowOrigin: '*'
-```
-
-Or use Caddy/nginx to proxy everything through one origin.
-
-### Authentication Failures
-
-Check authproxy logs:
-```bash
-docker compose logs authproxy
-```
-
-Ensure `JWT_SECRET` is set and consistent across restarts.
 
 ## License
 
