@@ -13,6 +13,18 @@ A browser-based video production toolkit for [MediaMTX](https://github.com/bluen
 - VU meters and stream stats overlay
 - Keyboard shortcuts for fast operation
 
+## Prerequisites
+
+- **Docker** with Docker Compose (for containerized setup)
+- **Node.js 20+** (for local development)
+- **Caddy** (for local development without Docker)
+- Ports 443, 1935, 8554, 8888, 8889 available
+
+### macOS Notes
+
+For WebRTC to work in Docker on macOS, enable **host networking** in Docker Desktop:
+Settings → Features in development → Enable host networking
+
 ## Quick Start
 
 ### Docker (Recommended)
@@ -80,9 +92,10 @@ export DOMAIN=yourdomain.com
 docker compose up -d
 ```
 
-For local testing with self-signed certs:
+For local testing with self-signed certs (default):
 ```bash
-DOMAIN=:443 TLS_MODE=internal docker compose up -d
+docker compose up -d
+# Or explicitly: DOMAIN=:443 docker compose up -d
 ```
 
 ## Configuration
