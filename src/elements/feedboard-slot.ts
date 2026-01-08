@@ -1,5 +1,6 @@
 import { LitElement, html, css } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
+import { keyed } from 'lit/directives/keyed.js'
 import { setSlotDragData, parseDragData } from '@/lib/drag-utils'
 import './feedboard-clock'
 import './feedboard-youtube'
@@ -239,7 +240,7 @@ export class FeedboardSlot extends LitElement {
 
     switch (config.type) {
       case 'stream':
-        return html`
+        return keyed(config.src, html`
           <feedboard-player
             src=${config.src || ''}
             server=${this.server}
@@ -252,7 +253,7 @@ export class FeedboardSlot extends LitElement {
             @muted-change=${this.handleMutedChange}
             @protocol-change=${this.handleProtocolChange}
           ></feedboard-player>
-        `
+        `)
 
       case 'clock':
         return html`
