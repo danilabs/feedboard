@@ -23,11 +23,6 @@ A browser-based video production toolkit for [MediaMTX](https://github.com/bluen
 - **Node.js 20+**
 - **Caddy**
 
-### macOS Notes
-
-For WebRTC to work in Docker on macOS, enable **host networking** in Docker Desktop:
-Settings → Features in development → Enable host networking
-
 ## Quick Start
 
 ### Docker
