@@ -84,7 +84,7 @@ docker compose up -d
 For WebRTC to work from external clients, MediaMTX needs to advertise a public IP. Edit within `mediamtx.yml`:
 
 ```yaml
-webrtcAdditionalHosts: [YOUR_EC2_PUBLIC_IP]
+webrtcAdditionalHosts: [EC2_PUBLIC_IP]
 ```
 
 Also ensure the security group allows:
@@ -122,13 +122,13 @@ Generate stream keys in the admin panel. Use them with:
 
 **RTMP:**
 ```
-Server: rtmp://yourserver:1935/
-Stream Key: streampath?key=YOUR_KEY
+Server: rtmp://server:1935/
+Stream Key: streampath?key=STREAM_KEY
 ```
 
 **SRT:**
 ```
-srt://yourserver:8890?streamid=publish:streampath:stream:YOUR_KEY
+srt://server:8890?streamid=publish:streampath:stream:STREAM_KEY
 ```
 
 ### Components
@@ -146,6 +146,22 @@ srt://yourserver:8890?streamid=publish:streampath:stream:YOUR_KEY
 <!-- Clock -->
 <feedboard-clock format="HH:mm:ss" timezone="America/New_York"></feedboard-clock>
 ```
+
+### Standalone Component Examples
+
+Demo pages showing components outside the main app:
+
+```bash
+./mediamtx                # Terminal 1
+./dev/test-streams.sh     # Terminal 2
+npm run dev               # Terminal 3
+
+# Access examples at:
+# http://localhost:5173/examples/components-demo.html
+# http://localhost:5173/examples/clocks.html
+```
+
+Note: Some components require the MediaMTX API enabled to function.
 
 ### Keyboard Shortcuts
 
@@ -223,10 +239,10 @@ Stream an MP4 file to RTMP (loops forever):
 ./dev/play-mp4.sh video.mp4 streamname
 
 # With stream key
-./dev/play-mp4.sh video.mp4 "mystream?key=YOUR_STREAM_KEY"
+./dev/play-mp4.sh video.mp4 "mystream?key=STREAM_KEY"
 
 # To remote server
-RTMP_SERVER=rtmp://yourserver:1935 ./dev/play-mp4.sh video.mp4 demo
+RTMP_SERVER=rtmp://server:1935 ./dev/play-mp4.sh video.mp4 demo
 ```
 
 Automatically scales to 1080p and re-encodes for compatibility.
@@ -243,7 +259,7 @@ ffmpeg -f lavfi -i testsrc=size=1280x720:rate=30 \
 # With authentication
 ffmpeg -f lavfi -i testsrc=size=1280x720:rate=30 \
        -c:v libx264 -preset ultrafast -tune zerolatency \
-       -f flv "rtmp://localhost:1935/test?key=YOUR_STREAM_KEY"
+       -f flv "rtmp://localhost:1935/test?key=STREAM_KEY"
 ```
 
 ## Project Structure
