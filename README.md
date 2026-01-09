@@ -87,7 +87,7 @@ For WebRTC to work from external clients, MediaMTX needs to advertise a public I
 webrtcAdditionalHosts: [EC2_PUBLIC_IP]
 ```
 
-Also ensure the security group allows:
+Ensure the security group allows the following ports:
 - TCP 80 (HTTP, for Let's Encrypt)
 - TCP 443 (HTTPS)
 - TCP 1935 (RTMP)
@@ -220,18 +220,7 @@ Add test streams to MediaMTX for development:
 ./dev/test-streams.sh
 ```
 
-Available test streams:
-| Stream | Description |
-|--------|-------------|
-| `test_bars` | SMPTE HD bars + 1kHz tone |
-| `testsrc` | Test pattern with timecode |
-| `gradient` | Animated color gradient |
-| `pal_bars` | PAL 75% color bars |
-| `color_red` | Solid red |
-| `color_green` | Solid green |
-| `color_blue` | Solid blue |
-
-### Play MP4 File
+### Loop MP4 File
 
 Stream an MP4 file to RTMP (loops forever):
 
@@ -243,40 +232,6 @@ Stream an MP4 file to RTMP (loops forever):
 
 # To remote server
 RTMP_SERVER=rtmp://server:1935 ./dev/play-mp4.sh video.mp4 demo
-```
-
-Automatically scales to 1080p and re-encodes for compatibility.
-
-### Manual FFmpeg Test
-
-```bash
-# Push test stream via RTMP
-ffmpeg -f lavfi -i testsrc=size=1280x720:rate=30 \
-       -f lavfi -i sine=frequency=440:sample_rate=48000 \
-       -c:v libx264 -preset ultrafast -tune zerolatency \
-       -c:a aac -f flv rtmp://localhost:1935/test
-
-# With authentication
-ffmpeg -f lavfi -i testsrc=size=1280x720:rate=30 \
-       -c:v libx264 -preset ultrafast -tune zerolatency \
-       -f flv "rtmp://localhost:1935/test?key=STREAM_KEY"
-```
-
-## Project Structure
-
-```
-feedboard/
-├── src/
-│   ├── elements/           # Lit web components
-│   ├── lib/                # Utilities (config, clients)
-│   └── routes/             # SPA routes
-├── authproxy/              # Go authentication service
-├── thumbnailer/            # Go thumbnail service
-├── docker-compose.yml      # Production stack
-├── docker-compose.dev.yml  # Development stack
-├── Caddyfile.docker        # Production Caddy config
-├── Caddyfile.dev           # Development Caddy config
-└── mediamtx.yml            # MediaMTX configuration
 ```
 
 ## License
