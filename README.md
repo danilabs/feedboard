@@ -105,6 +105,15 @@ Generate secure secrets with: `openssl rand -hex 32`
 
 ## Usage
 
+### Default Login
+
+```
+Username: admin
+Password: admin
+```
+
+Click your username in the header to change your password.
+
 ### Admin Panel
 
 Access `/admin` to manage:

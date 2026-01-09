@@ -121,6 +121,125 @@ export class FeedboardHeader extends LitElement {
       color: #ccc;
     }
 
+    .user-btn {
+      padding: 0.375rem 0.75rem;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: #888;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .user-btn:hover {
+      border-color: #333;
+      color: #ccc;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .modal {
+      background: #111;
+      border: 1px solid #1e1e1e;
+      border-radius: 12px;
+      padding: 1.5rem;
+      width: 100%;
+      max-width: 360px;
+    }
+
+    .modal-title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0 0 1rem 0;
+      color: #fff;
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #888;
+      margin-bottom: 0.5rem;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: #161616;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 0.875rem;
+      box-sizing: border-box;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: #2563eb;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: flex-end;
+      margin-top: 1.5rem;
+    }
+
+    .btn {
+      padding: 0.5rem 1rem;
+      background: #1e3a5f;
+      border: 1px solid #2563eb;
+      border-radius: 6px;
+      color: #60a5fa;
+      font-size: 0.75rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn:hover {
+      background: #234876;
+    }
+
+    .btn-secondary {
+      background: transparent;
+      border-color: #333;
+      color: #888;
+    }
+
+    .btn-secondary:hover {
+      border-color: #555;
+      color: #ccc;
+    }
+
+    .error-msg {
+      color: #f87171;
+      font-size: 0.75rem;
+      margin-top: 0.5rem;
+    }
+
+    .success-msg {
+      color: #4ade80;
+      font-size: 0.75rem;
+      margin-top: 0.5rem;
+    }
+
     @media (max-width: 640px) {
       nav a span {
         display: none;
@@ -137,6 +256,9 @@ export class FeedboardHeader extends LitElement {
   @state() private user: AuthUser | null = null
   @state() private authChecked = false
   @state() private isFullscreen = false
+  @state() private showPasswordModal = false
+  @state() private passwordError = ''
+  @state() private passwordSuccess = ''
 
   connectedCallback() {
     super.connectedCallback()
@@ -178,6 +300,94 @@ export class FeedboardHeader extends LitElement {
     window.location.href = '/login'
   }
 
+  private openPasswordModal() {
+    this.passwordError = ''
+    this.passwordSuccess = ''
+    this.showPasswordModal = true
+  }
+
+  private closePasswordModal() {
+    this.showPasswordModal = false
+    this.passwordError = ''
+    this.passwordSuccess = ''
+  }
+
+  private async handleChangePassword(e: Event) {
+    e.preventDefault()
+    const form = e.target as HTMLFormElement
+    const data = new FormData(form)
+    const currentPassword = data.get('current_password') as string
+    const newPassword = data.get('new_password') as string
+    const confirmPassword = data.get('confirm_password') as string
+
+    this.passwordError = ''
+    this.passwordSuccess = ''
+
+    if (newPassword !== confirmPassword) {
+      this.passwordError = 'New passwords do not match'
+      return
+    }
+
+    if (newPassword.length < 8) {
+      this.passwordError = 'Password must be at least 8 characters'
+      return
+    }
+
+    try {
+      const res = await fetch('/auth/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword,
+        }),
+      })
+
+      if (!res.ok) {
+        const text = await res.text()
+        this.passwordError = text || 'Failed to change password'
+        return
+      }
+
+      this.passwordSuccess = 'Password changed successfully'
+      form.reset()
+      setTimeout(() => this.closePasswordModal(), 1500)
+    } catch (err: any) {
+      this.passwordError = err.message || 'Failed to change password'
+    }
+  }
+
+  private renderPasswordModal() {
+    return html`
+      <div class="modal-overlay" @click=${(e: Event) => e.target === e.currentTarget && this.closePasswordModal()}>
+        <div class="modal">
+          <h2 class="modal-title">Change Password</h2>
+          <form @submit=${this.handleChangePassword}>
+            <div class="form-group">
+              <label class="form-label">Current Password</label>
+              <input type="password" name="current_password" class="form-input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">New Password</label>
+              <input type="password" name="new_password" class="form-input" required minlength="8">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Confirm New Password</label>
+              <input type="password" name="confirm_password" class="form-input" required minlength="8">
+            </div>
+            ${this.passwordError ? html`<div class="error-msg">${this.passwordError}</div>` : ''}
+            ${this.passwordSuccess ? html`<div class="success-msg">${this.passwordSuccess}</div>` : ''}
+            <div class="modal-actions">
+              <button type="button" class="btn btn-secondary" @click=${this.closePasswordModal}>Cancel</button>
+              <button type="submit" class="btn">Change Password</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `
+  }
+
   render() {
     return html`
       <header class="header">
@@ -206,14 +416,15 @@ export class FeedboardHeader extends LitElement {
 
         <div class="right">
           ${this.authChecked && this.user ? html`
-            <div class="user-info">
+            <button class="user-btn" @click=${this.openPasswordModal} title="Change password">
               <span>${this.user.username}</span>
               <span class="badge badge-${this.user.role}">${this.user.role}</span>
-            </div>
+            </button>
             <button class="logout-btn" @click=${this.logout}>Logout</button>
           ` : ''}
         </div>
       </header>
+      ${this.showPasswordModal ? this.renderPasswordModal() : ''}
     `
   }
 }
