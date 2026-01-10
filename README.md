@@ -25,8 +25,9 @@ https://github.com/user-attachments/assets/423af763-8944-4604-acec-292109d9f5e1
 - Local camera/screen/tab capture with WHIP publishing
 - Real-time thumbnails via thumbnailer service
 - User authentication with JWT tokens
-- Stream keys for RTMP/SRT/webRTC ingress/egres
+- Stream keys for RTMP/SRT/webRTC ingress/egress
 - VU meters and stream stats overlay
+- Live annotation and drawing overlay
 - Keyboard shortcuts for fast operation
 
 ## Prerequisites
