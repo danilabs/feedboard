@@ -66,17 +66,19 @@ Access via `https://localhost`
 
 ```
 Browser → Caddy → Feedboard SPA
-                → authproxy (Go) → SQLite
                 → MediaMTX (streaming)
-                → thumbnailer (Go)
+                → authproxy (Go) → SQLite  [optional]
+                → thumbnailer (Go)         [optional]
 ```
 
 | Service | Port | Description |
 |---------|------|-------------|
 | Caddy | 80, 443 | Reverse proxy, TLS |
 | MediaMTX | 1935, 8189, 8554, 8888, 8889, 8890, 9997 | RTMP, WebRTC UDP, RTSP, HLS, WebRTC HTTP, SRT, API |
-| authproxy | 8091 | Authentication, stream keys |
-| thumbnailer | 8090 | Live thumbnail generation |
+| authproxy | 8091 | Authentication, stream keys, MediaMTX auth hook |
+| thumbnailer | 8090 | Live thumbnail generation via RTSP |
+
+**authproxy** and **thumbnailer** are optional and can be used together, separately, or with just MediaMTX (no UI). Without authproxy, streams are unauthenticated. Without thumbnailer, sidebar previews show placeholders until a stream is selected.
 
 ## Production Deployment
 
