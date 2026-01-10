@@ -796,6 +796,13 @@ export class FeedboardPlayer extends LitElement {
         }
       }
     }
+    this.dispatchEvent(
+      new CustomEvent('muted-change', {
+        detail: { muted: this.muted },
+        bubbles: true,
+        composed: true,
+      })
+    )
   }
 
   private async handlePlayClick() {
@@ -841,6 +848,13 @@ export class FeedboardPlayer extends LitElement {
     this.protocol = select.value as Protocol
     this.disconnect()
     this.connect()
+    this.dispatchEvent(
+      new CustomEvent('protocol-change', {
+        detail: { protocol: this.protocol },
+        bubbles: true,
+        composed: true,
+      })
+    )
   }
 
   private reconnect() {

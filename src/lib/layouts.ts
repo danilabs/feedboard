@@ -19,6 +19,15 @@ export const layouts: LayoutTemplate[] = [
     containerStyle: 'display: grid; grid-template-columns: 1fr; grid-template-rows: 1fr;',
   },
   {
+    id: 'pip',
+    name: 'PiP',
+    slots: [
+      { id: 'slot-0', style: 'grid-area: 1 / 1 / 2 / 2; z-index: 1;' },
+      { id: 'slot-1', style: 'position: absolute; bottom: 1rem; right: 1rem; z-index: 2; width: 30%; height: auto !important; aspect-ratio: 16/9; overflow: hidden;' },
+    ],
+    containerStyle: 'display: grid; grid-template-columns: 1fr; grid-template-rows: 1fr; position: relative;',
+  },
+  {
     id: '2x2',
     name: '2×2',
     slots: [

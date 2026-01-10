@@ -442,6 +442,21 @@ export class FeedboardApp extends LitElement {
       background: #0d0d0d;
     }
 
+    .section-header.expandable {
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .section-header.expandable:hover {
+      color: #666;
+      background: #111;
+    }
+
+    .expand-icon {
+      font-size: 0.8rem;
+      color: #555;
+    }
+
     .sources-list {
       padding: 0.375rem;
     }
@@ -954,6 +969,8 @@ export class FeedboardApp extends LitElement {
   @state() private showLabels = true
   @state() private showVu = true
   @state() private showShortcuts = false
+  @state() private showClockControls = false
+  @state() private showYoutubeControls = false
   @state() private thumbnails: Map<string, string> = new Map()
   @state() private thumbnailerConnected = false
   @state() private showThumbs = true
@@ -1459,6 +1476,14 @@ export class FeedboardApp extends LitElement {
     this.selectedCell = e.detail.index
   }
 
+  private handleSlotConfigChange = (e: CustomEvent<{ index: number; key: string; value: any }>) => {
+    const { index, key, value } = e.detail
+    const newCells = [...this.cells]
+    newCells[index] = { ...newCells[index], [key]: value }
+    this.cells = newCells
+    this.saveState()
+  }
+
   private handleSlotFullscreen = (e: CustomEvent<{ index: number }>) => {
     this.toggleCellFullscreen(e.detail.index)
   }
@@ -1613,9 +1638,10 @@ export class FeedboardApp extends LitElement {
         @slot-move=${this.handleSlotMove}
         @slot-select=${this.handleSlotSelect}
         @slot-fullscreen=${this.handleSlotFullscreen}
+        @slot-config-change=${this.handleSlotConfigChange}
       >
         ${template.slots.map((slot, i) => {
-          const slotStyle = slot.gridArea ? `grid-area: ${slot.gridArea};` : ''
+          const slotStyle = slot.style || (slot.gridArea ? `grid-area: ${slot.gridArea};` : '')
           const isFullscreen = this.fullscreenCell === i
           return html`
             <feedboard-slot
@@ -1795,37 +1821,42 @@ export class FeedboardApp extends LitElement {
           )}
         </div>
 
-        <div class="section-header">Add Clock</div>
-        <div class="clock-controls">
-          <select
-            class="tz-select"
-            @change=${(e: Event) => this.handleTimezoneChange((e.target as HTMLSelectElement).value)}
-          >
-            <option value="" ?selected=${this.selectedTimezone === ''}>Local</option>
-            ${this.getTimezones().map(
-              (tz) => html`<option value=${tz} ?selected=${tz === this.selectedTimezone}>${this.formatTimezoneLabel(tz)}</option>`
-            )}
-          </select>
-          <input
-            type="text"
-            class="label-input"
-            placeholder="Label"
-            .value=${this.clockLabel}
-            @input=${(e: Event) => (this.clockLabel = (e.target as HTMLInputElement).value)}
-          />
-          <select
-            class="format-select"
-            .value=${this.clockFormat}
-            @change=${(e: Event) => (this.clockFormat = (e.target as HTMLSelectElement).value)}
-          >
-            <option value="HH:mm:ss">HH:mm:ss</option>
-            <option value="HH:mm">HH:mm</option>
-            <option value="HH:mm:ss:ff">Timecode</option>
-          </select>
-          <button class="add-clock-btn" @click=${() => this.addClockToCell()}>
-            Add Clock
-          </button>
+        <div class="section-header expandable" @click=${() => this.showClockControls = !this.showClockControls}>
+          <span>Add Clock</span>
+          <span class="expand-icon">${this.showClockControls ? '−' : '+'}</span>
         </div>
+        ${this.showClockControls ? html`
+          <div class="clock-controls">
+            <select
+              class="tz-select"
+              @change=${(e: Event) => this.handleTimezoneChange((e.target as HTMLSelectElement).value)}
+            >
+              <option value="" ?selected=${this.selectedTimezone === ''}>Local</option>
+              ${this.getTimezones().map(
+                (tz) => html`<option value=${tz} ?selected=${tz === this.selectedTimezone}>${this.formatTimezoneLabel(tz)}</option>`
+              )}
+            </select>
+            <input
+              type="text"
+              class="label-input"
+              placeholder="Label"
+              .value=${this.clockLabel}
+              @input=${(e: Event) => (this.clockLabel = (e.target as HTMLInputElement).value)}
+            />
+            <select
+              class="format-select"
+              .value=${this.clockFormat}
+              @change=${(e: Event) => (this.clockFormat = (e.target as HTMLSelectElement).value)}
+            >
+              <option value="HH:mm:ss">HH:mm:ss</option>
+              <option value="HH:mm">HH:mm</option>
+              <option value="HH:mm:ss:ff">Timecode</option>
+            </select>
+            <button class="add-clock-btn" @click=${() => this.addClockToCell()}>
+              Add Clock
+            </button>
+          </div>
+        ` : ''}
 
         <div class="section-header">Capture</div>
         <div class="sources-list">
@@ -1843,25 +1874,30 @@ export class FeedboardApp extends LitElement {
           </div>
         </div>
 
-        <div class="section-header">YouTube</div>
-        <div class="clock-controls">
-          <input
-            type="text"
-            class="label-input"
-            placeholder="Paste YouTube URL"
-            .value=${this.youtubeUrl}
-            @input=${(e: Event) => (this.youtubeUrl = (e.target as HTMLInputElement).value)}
-            @keydown=${(e: KeyboardEvent) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                this.addYoutubeToCell()
-              }
-            }}
-          />
-          <button class="add-clock-btn" @click=${() => this.addYoutubeToCell()}>
-            Add YouTube
-          </button>
+        <div class="section-header expandable" @click=${() => this.showYoutubeControls = !this.showYoutubeControls}>
+          <span>YouTube</span>
+          <span class="expand-icon">${this.showYoutubeControls ? '−' : '+'}</span>
         </div>
+        ${this.showYoutubeControls ? html`
+          <div class="clock-controls">
+            <input
+              type="text"
+              class="label-input"
+              placeholder="Paste YouTube URL"
+              .value=${this.youtubeUrl}
+              @input=${(e: Event) => (this.youtubeUrl = (e.target as HTMLInputElement).value)}
+              @keydown=${(e: KeyboardEvent) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  this.addYoutubeToCell()
+                }
+              }}
+            />
+            <button class="add-clock-btn" @click=${() => this.addYoutubeToCell()}>
+              Add YouTube
+            </button>
+          </div>
+        ` : ''}
 
         ${this.presets.length > 0 || isAdmin() ? html`
           <div class="presets-section">

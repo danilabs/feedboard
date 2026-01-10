@@ -12,23 +12,32 @@
 		reverse_proxy authproxy:8091
 	}
 
-	# MediaMTX API (host network)
+	# MediaMTX API (host network) - requires auth
 	handle /v3/* {
+		forward_auth authproxy:8091 {
+			uri /auth/me
+		}
 		reverse_proxy {$MTX_HOST}:9997
 	}
 
-	# Thumbnailer WebSocket
+	# Thumbnailer WebSocket (requires login)
 	@thumbs_ws {
 		path /thumbs/ws
 		header Connection *Upgrade*
 	}
 	handle @thumbs_ws {
+		forward_auth authproxy:8091 {
+			uri /auth/me
+		}
 		uri strip_prefix /thumbs
 		reverse_proxy thumbnailer:8090
 	}
 
-	# Thumbnailer API
+	# Thumbnailer API (requires login)
 	handle_path /thumbs/* {
+		forward_auth authproxy:8091 {
+			uri /auth/me
+		}
 		reverse_proxy thumbnailer:8090
 	}
 

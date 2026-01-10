@@ -293,9 +293,11 @@ export class RouteAdmin extends LitElement {
   @state() private keys: StreamKey[] = []
   @state() private permissions: Permission[] = []
   @state() private showAddUserModal = false
+  @state() private showEditUserModal = false
   @state() private showAddKeyModal = false
   @state() private showAddPermissionModal = false
   @state() private showKeyInfoModal = false
+  @state() private selectedUser: User | null = null
   @state() private selectedKey: StreamKey | null = null
   @state() private loading = true
 
@@ -428,6 +430,37 @@ export class RouteAdmin extends LitElement {
     }
   }
 
+  private editUser(user: User) {
+    this.selectedUser = user
+    this.showEditUserModal = true
+  }
+
+  private async handleEditUser(e: Event) {
+    e.preventDefault()
+    if (!this.selectedUser) return
+    const form = e.target as HTMLFormElement
+    const data = new FormData(form)
+    const password = data.get('password') as string
+    const role = data.get('role') as string
+
+    try {
+      const body: { username: string; role: string; password?: string } = {
+        username: this.selectedUser.username,
+        role
+      }
+      if (password) {
+        body.password = password
+      }
+      await this.api('PUT', `/api/users/${this.selectedUser.id}`, body)
+      form.reset()
+      this.showEditUserModal = false
+      this.selectedUser = null
+      await this.loadUsers()
+    } catch (err: any) {
+      alert('Failed to update user: ' + err.message)
+    }
+  }
+
   private async deleteUser(id: number) {
     if (!confirm('Delete this user?')) return
     try {
@@ -494,6 +527,7 @@ export class RouteAdmin extends LitElement {
       </main>
 
       ${this.showAddUserModal ? this.renderAddUserModal() : ''}
+      ${this.showEditUserModal ? this.renderEditUserModal() : ''}
       ${this.showAddKeyModal ? this.renderAddKeyModal() : ''}
       ${this.showAddPermissionModal ? this.renderAddPermissionModal() : ''}
       ${this.showKeyInfoModal ? this.renderKeyInfoModal() : ''}
@@ -524,6 +558,7 @@ export class RouteAdmin extends LitElement {
                   <td><span class="badge badge-${u.role}">${u.role}</span></td>
                   <td class="text-muted">${new Date(u.created_at).toLocaleDateString()}</td>
                   <td class="actions">
+                    <button class="btn btn-sm" @click=${() => this.editUser(u)}>Edit</button>
                     <button class="btn btn-danger btn-sm" @click=${() => this.deleteUser(u.id)}>Delete</button>
                   </td>
                 </tr>
@@ -638,6 +673,37 @@ export class RouteAdmin extends LitElement {
     `
   }
 
+  private renderEditUserModal() {
+    const u = this.selectedUser
+    if (!u) return ''
+
+    return html`
+      <div class="modal-overlay" @click=${(e: Event) => e.target === e.currentTarget && (this.showEditUserModal = false)}>
+        <div class="modal">
+          <h2 class="modal-title">Edit User: ${u.username}</h2>
+          <form @submit=${this.handleEditUser}>
+            <div class="form-group">
+              <label class="form-label">New Password (leave blank to keep current)</label>
+              <input type="password" name="password" class="form-input" minlength="8" placeholder="••••••••">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Role</label>
+              <select name="role" class="form-select">
+                <option value="viewer" ?selected=${u.role === 'viewer'}>Viewer</option>
+                <option value="publisher" ?selected=${u.role === 'publisher'}>Publisher</option>
+                <option value="admin" ?selected=${u.role === 'admin'}>Admin</option>
+              </select>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn" @click=${() => { this.showEditUserModal = false; this.selectedUser = null }}>Cancel</button>
+              <button type="submit" class="btn">Save Changes</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `
+  }
+
   private renderAddKeyModal() {
     return html`
       <div class="modal-overlay" @click=${(e: Event) => e.target === e.currentTarget && (this.showAddKeyModal = false)}>
@@ -708,7 +774,7 @@ export class RouteAdmin extends LitElement {
     // Publish URLs
     const rtmpServer = `rtmp://${host}:1935`
     const rtmpStreamKey = `${path}?key=${k.key}`
-    const srtUrl = `srt://${host}:8890?streamid=#!::m=publish,r=${path},u=stream,s=${k.key}`
+    const srtUrl = `srt://${host}:8890?streamid=publish:${path}:stream:${k.key}`
     const whipUrl = `https://${host}/${path}/whip`
     const whipUrlLegacy = `https://${host}/${path}/whip?key=${k.key}`
 
@@ -717,6 +783,7 @@ export class RouteAdmin extends LitElement {
     const whepUrlLegacy = `https://${host}/${path}/whep?token=${k.key}`
     const hlsUrl = `https://${host}/${path}/index.m3u8?token=${k.key}`
     const rtspPlayUrl = `rtsp://stream:${k.key}@${host}:8554/${path}`
+    const srtReadUrl = `srt://${host}:8890?streamid=read:${path}:stream:${k.key}`
 
     return html`
       <div class="modal-overlay" @click=${(e: Event) => e.target === e.currentTarget && (this.showKeyInfoModal = false)}>
@@ -802,6 +869,15 @@ export class RouteAdmin extends LitElement {
                   <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(whepUrlLegacy, e.target as HTMLButtonElement)}>Copy</button>
                 </div>
               </details>
+            </div>
+
+            <div class="connection-group">
+              <h4>SRT (Low latency)</h4>
+              <div class="connection-field">
+                <input type="text" readonly .value=${srtReadUrl}>
+                <button class="btn btn-sm" @click=${(e: Event) => this.copyToClipboard(srtReadUrl, e.target as HTMLButtonElement)}>Copy</button>
+              </div>
+              <p class="connection-note">ffplay, VLC, mpv</p>
             </div>
 
             <div class="connection-group">

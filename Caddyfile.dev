@@ -3,7 +3,7 @@
 # Proxies Vite + MediaMTX through single HTTPS port
 #
 # Environment variables:
-#   MTX_HOST         - mediamtx (default) or host.docker.internal
+#   MTX_HOST         - host.docker.internal (default, MediaMTX on host network)
 #   VITE_HOST        - vite (default)
 #   THUMBNAILER_HOST - thumbnailer (default)
 #   AUTH_HOST        - authproxy (default)
@@ -30,40 +30,62 @@
 		reverse_proxy {$VITE_HOST:vite}:5173
 	}
 
-	# MediaMTX API
+	# MediaMTX API - requires auth
 	handle /v3/* {
+		forward_auth {$AUTH_HOST:authproxy}:8091 {
+			uri /auth/me
+		}
 		reverse_proxy {$MTX_HOST:mediamtx}:9997
 	}
 
-	# Thumbnailer WebSocket - must come before handle_path
+	# Thumbnailer WebSocket (requires login)
 	@thumbs_ws {
 		path /thumbs/ws
 		header Connection *Upgrade*
 	}
 	handle @thumbs_ws {
+		forward_auth {$AUTH_HOST:authproxy}:8091 {
+			uri /auth/me
+		}
 		uri strip_prefix /thumbs
 		reverse_proxy {$THUMBNAILER_HOST:thumbnailer}:8090
 	}
 
-	# Thumbnailer API - handle_path strips /thumbs prefix
+	# Thumbnailer API (requires login)
 	handle_path /thumbs/* {
+		forward_auth {$AUTH_HOST:authproxy}:8091 {
+			uri /auth/me
+		}
 		reverse_proxy {$THUMBNAILER_HOST:thumbnailer}:8090
 	}
 
-	# MediaMTX WebRTC - WHIP/WHEP
-	@whip path */whip
-	handle @whip {
-		reverse_proxy {$MTX_HOST:mediamtx}:8889
-	}
-	@whep path */whep
-	handle @whep {
+	# MediaMTX WebRTC - WHIP/WHEP endpoints
+	# MediaMTX doesn't handle OPTIONS preflight (returns 405), so Caddy handles it
+	@webrtc path_regexp webrtc ^/.+/wh[ie]p(/.*)?$
+	handle @webrtc {
+		@options method OPTIONS
+		handle @options {
+			header Access-Control-Allow-Origin *
+			header Access-Control-Allow-Methods "GET, POST, PATCH, DELETE, OPTIONS"
+			header Access-Control-Allow-Headers "Content-Type, Authorization, If-Match"
+			header Access-Control-Expose-Headers "Location, Link, ETag"
+			header Access-Control-Max-Age "86400"
+			respond 204
+		}
 		reverse_proxy {$MTX_HOST:mediamtx}:8889
 	}
 
-	# MediaMTX HLS
-	@hls path_regexp hls ^/.+\.(m3u8|ts)$
+	# MediaMTX HLS - auth via cookie, pass token to MediaMTX
+	@hls path_regexp hls ^/.+\.(m3u8|ts|mp4)$
 	handle @hls {
-		reverse_proxy {$MTX_HOST:mediamtx}:8888
+		forward_auth {$AUTH_HOST:authproxy}:8091 {
+			uri /auth/token?{http.request.uri.query}
+			copy_headers X-Auth-Token
+		}
+		# Pass the token as Authorization header to MediaMTX
+		reverse_proxy {$MTX_HOST:mediamtx}:8888 {
+			header_up Authorization "Bearer {http.request.header.X-Auth-Token}"
+		}
 	}
 
 	# Static examples (bypass SPA routing)

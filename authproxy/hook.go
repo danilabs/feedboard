@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -45,10 +46,18 @@ func (h *HookHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Hook: action=%s path=%s protocol=%s ip=%s user=%s pass=%v token=%v query=%s",
 		req.Action, req.Path, req.Protocol, req.IP, req.User, req.Password != "", req.Token != "", req.Query)
 
-	// Allow internal service accounts via token
+	// Allow thumbnailer service account (user=service for read actions)
 	thumbnailerToken := os.Getenv("THUMBNAILER_TOKEN")
-	if thumbnailerToken != "" && req.Password == thumbnailerToken && req.Action == "read" {
-		log.Printf("Hook: allowing service account via token")
+	if thumbnailerToken != "" && req.User == "service" && req.Password == thumbnailerToken && req.Action == "read" {
+		log.Printf("Hook: allowing thumbnailer service account")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Allow internal publisher service account (user=internal for publish actions)
+	internalToken := os.Getenv("INTERNAL_PUBLISH_TOKEN")
+	if internalToken != "" && req.User == "internal" && req.Password == internalToken && req.Action == "publish" {
+		log.Printf("Hook: allowing internal publisher for path=%s", req.Path)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -199,14 +208,11 @@ func (h *HookHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Unauthorized", http.StatusUnauthorized)
 }
 
-// extractQueryParam extracts a parameter from a query string
+// extractQueryParam extracts a parameter from a query string (URL-decoded)
 func extractQueryParam(query, param string) string {
-	parts := strings.Split(query, "&")
-	for _, part := range parts {
-		kv := strings.SplitN(part, "=", 2)
-		if len(kv) == 2 && kv[0] == param {
-			return kv[1]
-		}
+	values, err := url.ParseQuery(query)
+	if err != nil {
+		return ""
 	}
-	return ""
+	return values.Get(param)
 }

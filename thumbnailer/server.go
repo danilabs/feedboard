@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -34,7 +37,9 @@ func NewServer(hub *Hub, mtxClient *MediaMTXClient, capture *CaptureManager) *Se
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
 			CheckOrigin: func(r *http.Request) bool {
-				return true // Allow all origins for development
+				origin := r.Header.Get("Origin")
+				// Allow same-origin (no Origin header) or configured origins
+				return origin == "" || isOriginAllowed(origin)
 			},
 		},
 	}
@@ -126,8 +131,8 @@ func (s *Server) handleGetThumbnail(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	w.Header().Set("X-Thumbnail-Width", string(rune(thumb.Width)))
-	w.Header().Set("X-Thumbnail-Height", string(rune(thumb.Height)))
+	w.Header().Set("X-Thumbnail-Width", strconv.Itoa(thumb.Width))
+	w.Header().Set("X-Thumbnail-Height", strconv.Itoa(thumb.Height))
 	w.Header().Set("X-Thumbnail-Timestamp", thumb.Timestamp.Format(time.RFC3339))
 	w.Write(thumb.Data)
 }
@@ -207,11 +212,54 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(status)
 }
 
+// CORS configuration from CORS_ORIGINS env var
+// Supports: "*" (all), "*.example.com" (suffix), exact URLs, comma-separated
+var (
+	corsAllowAll         bool
+	corsExactOrigins     = make(map[string]bool)
+	corsWildcardSuffixes []string
+)
+
+func init() {
+	if origins := os.Getenv("CORS_ORIGINS"); origins != "" {
+		for _, pattern := range strings.Split(origins, ",") {
+			pattern = strings.TrimSpace(pattern)
+			if pattern == "*" {
+				corsAllowAll = true
+			} else if strings.HasPrefix(pattern, "*.") {
+				corsWildcardSuffixes = append(corsWildcardSuffixes, pattern[1:])
+			} else {
+				corsExactOrigins[pattern] = true
+			}
+		}
+		log.Printf("CORS enabled for origins: %s", origins)
+	}
+}
+
+func isOriginAllowed(origin string) bool {
+	if corsAllowAll {
+		return true
+	}
+	if corsExactOrigins[origin] {
+		return true
+	}
+	for _, suffix := range corsWildcardSuffixes {
+		if strings.HasSuffix(origin, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		origin := r.Header.Get("Origin")
+		if origin != "" && isOriginAllowed(origin) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		}
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)

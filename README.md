@@ -1,40 +1,55 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="Feedboard" width="120" height="120">
+</p>
+
 # Feedboard
 
-A browser-based video production toolkit for [MediaMTX](https://github.com/bluenviron/mediamtx). Create multiview layouts, capture local sources, and stream via WebRTC - all from the browser.
+![Built with Claude](https://img.shields.io/badge/Built_with-Claude-D97757?style=for-the-badge&logo=claude&logoColor=white)
+
+A browser-based video production toolkit for [MediaMTX](https://github.com/bluenviron/mediamtx). Create multiview layouts, capture local sources, and stream via WebRTC.
+
+
+
+https://github.com/user-attachments/assets/423af763-8944-4604-acec-292109d9f5e1
+
+
+
+![Feedboard Multiview](docs/img/feedboard.png)
+
+![Login](docs/img/login.png) ![Stream Keys](docs/img/stream_keys.png)
 
 ## Features
 
 - Multi-view grid layouts (1x1 to 4x4, plus custom layouts)
-- WebRTC (WHEP) and HLS playback with automatic fallback
-- Local camera/screen capture with WHIP publishing
+- WebRTC (WHEP) and HLS playback
+- Local camera/screen/tab capture with WHIP publishing
 - Real-time thumbnails via thumbnailer service
 - User authentication with JWT tokens
-- Stream keys for OBS/encoder access
+- Stream keys for RTMP/SRT/webRTC ingress/egres
 - VU meters and stream stats overlay
 - Keyboard shortcuts for fast operation
 
+## Prerequisites
+
+- **Docker** with Docker Compose
+- **Node.js 20+**
+- **Caddy**
+
 ## Quick Start
 
-### Docker (Recommended)
+### Docker
 
 ```bash
-# Development
+cp .env.template .env
 docker compose -f docker-compose.dev.yml up
 
 # Access at https://localhost
 ```
 
-On first run, check the authproxy logs for the generated admin password:
-```bash
-docker compose -f docker-compose.dev.yml logs authproxy | grep Password
-```
-
-### Local Development (Mac)
-
-For Safari WebRTC compatibility, run MediaMTX locally:
+### Local Development
 
 ```bash
-# Terminal 1: MediaMTX (download from https://github.com/bluenviron/mediamtx/releases)
+# Terminal 1: MediaMTX
 ./mediamtx
 
 # Terminal 2: Vite dev server
@@ -47,16 +62,6 @@ caddy run
 
 Access via `https://localhost`
 
-### Docker + Local MediaMTX
-
-Best of both worlds - Docker services with local MediaMTX for WebRTC:
-
-```bash
-MTX_HOST=host.docker.internal docker compose -f docker-compose.dev.yml up
-```
-
-Then run MediaMTX locally in a separate terminal.
-
 ## Architecture
 
 ```
@@ -68,58 +73,58 @@ Browser → Caddy → Feedboard SPA
 
 | Service | Port | Description |
 |---------|------|-------------|
-| Caddy | 443 | Reverse proxy, TLS termination |
-| MediaMTX | 8554, 1935, 8889, 8888, 9997 | RTSP, RTMP, WebRTC, HLS, API |
+| Caddy | 80, 443 | Reverse proxy, TLS |
+| MediaMTX | 1935, 8189, 8554, 8888, 8889, 8890, 9997 | RTMP, WebRTC UDP, RTSP, HLS, WebRTC HTTP, SRT, API |
 | authproxy | 8091 | Authentication, stream keys |
 | thumbnailer | 8090 | Live thumbnail generation |
 
 ## Production Deployment
 
 ```bash
-# Set required secrets
-export JWT_SECRET=$(openssl rand -hex 32)
-export THUMBNAILER_TOKEN=$(openssl rand -hex 32)
-export DOMAIN=yourdomain.com
-
-# Start production stack
+cp .env.template .env
+# Edit .env - see Configuration section for variables
 docker compose up -d
 ```
 
-For local testing with self-signed certs:
-```bash
-DOMAIN=:443 TLS_MODE=internal docker compose up -d
-```
+### AWS EC2 / Cloud Deployment
 
-## Configuration
-
-### MediaMTX Setup
-
-Add to `mediamtx.yml` for authentication hook:
+For WebRTC to work from external clients, MediaMTX needs to advertise a public IP. Edit within `mediamtx.yml`:
 
 ```yaml
-api: yes
-apiAddress: :9997
-
-# Authentication hook
-authMethod: http
-authHTTPAddress: http://localhost:8091/auth/hook
-
-# CORS (if not behind proxy)
-apiAllowOrigin: '*'
-webrtcAllowOrigin: '*'
-hlsAllowOrigin: '*'
+webrtcAdditionalHosts: [EC2_PUBLIC_IP]
 ```
+
+Ensure the security group allows the following ports:
+- TCP 80 (HTTP, for Let's Encrypt)
+- TCP 443 (HTTPS)
+- TCP 1935 (RTMP)
+- UDP 8189 (WebRTC)
+- TCP 8554 (RTSP, if needed)
+- UDP 8890 (SRT)
+
+## Configuration
 
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `JWT_SECRET` | Secret for JWT signing | Required in production |
-| `THUMBNAILER_TOKEN` | Service account token | Required for thumbnailer |
+| `JWT_SECRET` | Secret for JWT signing | Required |
+| `THUMBNAILER_TOKEN` | Service account token | Optional |
 | `DOMAIN` | Domain for Let's Encrypt | `:443` (self-signed) |
-| `MTX_HOST` | MediaMTX hostname | `mediamtx` (Docker) |
+| `MTX_HOST` | MediaMTX hostname | `mediamtx` |
+
+Generate secure secrets with: `openssl rand -hex 32`
 
 ## Usage
+
+### Default Login
+
+```
+Username: admin
+Password: admin
+```
+
+Click your username in the header to change your password.
 
 ### Admin Panel
 
@@ -133,13 +138,13 @@ Generate stream keys in the admin panel. Use them with:
 
 **RTMP:**
 ```
-Server: rtmp://yourserver:1935/
-Stream Key: streampath?key=YOUR_KEY
+Server: rtmp://server:1935/
+Stream Key: streampath?key=STREAM_KEY
 ```
 
 **SRT:**
 ```
-srt://yourserver:8890?streamid=#!::m=publish,r=streampath,s=YOUR_KEY
+srt://server:8890?streamid=publish:streampath:stream:STREAM_KEY
 ```
 
 ### Components
@@ -157,6 +162,22 @@ srt://yourserver:8890?streamid=#!::m=publish,r=streampath,s=YOUR_KEY
 <!-- Clock -->
 <feedboard-clock format="HH:mm:ss" timezone="America/New_York"></feedboard-clock>
 ```
+
+### Standalone Component Examples
+
+Demo pages showing components outside the main app:
+
+```bash
+./mediamtx                # Terminal 1
+./dev/test-streams.sh     # Terminal 2
+npm run dev               # Terminal 3
+
+# Access examples at:
+# http://localhost:5173/examples/components-demo.html
+# http://localhost:5173/examples/clocks.html
+```
+
+Note: Some components require the MediaMTX API enabled to function.
 
 ### Keyboard Shortcuts
 
@@ -212,82 +233,22 @@ srt://yourserver:8890?streamid=#!::m=publish,r=streampath,s=YOUR_KEY
 Add test streams to MediaMTX for development:
 
 ```bash
-./dev/test-streams.sh         # Add all test streams
-./dev/test-streams.sh remove  # Remove all test streams
-./dev/test-streams.sh list    # List current paths
+./dev/test-streams.sh
 ```
 
-Available test streams:
-| Stream | Description |
-|--------|-------------|
-| `test_bars` | SMPTE HD bars + 1kHz tone |
-| `testsrc` | Test pattern with timecode |
-| `gradient` | Animated color gradient |
-| `pal_bars` | PAL 75% color bars |
-| `color_red` | Solid red |
-| `color_green` | Solid green |
-| `color_blue` | Solid blue |
+### Loop MP4 File
 
-### Manual FFmpeg Test
+Stream an MP4 file to RTMP (loops forever):
 
 ```bash
-# Push test stream via RTMP
-ffmpeg -f lavfi -i testsrc=size=1280x720:rate=30 \
-       -f lavfi -i sine=frequency=440:sample_rate=48000 \
-       -c:v libx264 -preset ultrafast -tune zerolatency \
-       -c:a aac -f flv rtmp://localhost:1935/test
+./dev/play-mp4.sh video.mp4 streamname
 
-# With authentication
-ffmpeg -f lavfi -i testsrc=size=1280x720:rate=30 \
-       -c:v libx264 -preset ultrafast -tune zerolatency \
-       -f flv "rtmp://localhost:1935/test?key=YOUR_STREAM_KEY"
+# With stream key
+./dev/play-mp4.sh video.mp4 "mystream?key=STREAM_KEY"
+
+# To remote server
+RTMP_SERVER=rtmp://server:1935 ./dev/play-mp4.sh video.mp4 demo
 ```
-
-## Project Structure
-
-```
-feedboard/
-├── src/
-│   ├── elements/           # Lit web components
-│   ├── lib/                # Utilities (config, clients)
-│   └── routes/             # SPA routes
-├── authproxy/              # Go authentication service
-├── thumbnailer/            # Go thumbnail service
-├── docker-compose.yml      # Production stack
-├── docker-compose.dev.yml  # Development stack
-├── Caddyfile.docker        # Production Caddy config
-├── Caddyfile.dev           # Development Caddy config
-└── mediamtx.yml            # MediaMTX configuration
-```
-
-## Troubleshooting
-
-### Safari WebRTC Issues
-
-Safari has strict WebRTC/ICE requirements. For local development on Mac:
-1. Run MediaMTX locally (not in Docker)
-2. Use `MTX_HOST=host.docker.internal` for Docker services
-3. Or use HLS fallback (higher latency)
-
-### CORS Errors
-
-Ensure MediaMTX has CORS configured:
-```yaml
-apiAllowOrigin: '*'
-webrtcAllowOrigin: '*'
-hlsAllowOrigin: '*'
-```
-
-Or use Caddy/nginx to proxy everything through one origin.
-
-### Authentication Failures
-
-Check authproxy logs:
-```bash
-docker compose logs authproxy
-```
-
-Ensure `JWT_SECRET` is set and consistent across restarts.
 
 ## License
 
