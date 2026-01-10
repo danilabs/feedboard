@@ -8,6 +8,13 @@
 
 A browser-based video production toolkit for [MediaMTX](https://github.com/bluenviron/mediamtx). Create multiview layouts, capture local sources, and stream via WebRTC.
 
+<!-- TODO: Replace with GitHub assets URL after upload -->
+https://github.com/user-attachments/assets/PASTE_VIDEO_ID_HERE.mp4
+
+![Feedboard Multiview](docs/img/feedboard.png)
+
+![Login](docs/img/login.png) ![Stream Keys](docs/img/stream_keys.png)
+
 ## Features
 
 - Multi-view grid layouts (1x1 to 4x4, plus custom layouts)

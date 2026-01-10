@@ -196,12 +196,18 @@
   </div>
 
   <script>
-    // Configure for default MediaMTX ports (no auth)
-    window.FEEDBOARD_CONFIG = {
+    // Auto-detect: use direct ports for localhost, otherwise use current origin (via Caddy)
+    const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    window.FEEDBOARD_CONFIG = isLocal ? {
       webrtc: 'http://localhost:8889',
       hls: 'http://localhost:8888',
       api: 'http://localhost:9997',
       auth: { enabled: false }
+    } : {
+      webrtc: location.origin,
+      hls: location.origin,
+      api: location.origin,
+      auth: { enabled: true }
     };
 
     document.addEventListener('DOMContentLoaded', () => {
