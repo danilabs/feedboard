@@ -28,7 +28,10 @@ udpMaxPayloadSize: 1472
 # Size of the read buffer of every UDP socket.
 # This can be increased to decrease packet losses.
 # It defaults to the default value of the operating system.
-udpReadBufferSize: 0
+# Raised from the OS default to better absorb bursts from WebRTC/RTP on the
+# LAN (multiple simultaneous streams competing for the same socket buffer).
+# 2MB is a safe upper bound for a home server; lower it if RAM is tight.
+udpReadBufferSize: 2097152
 
 # Command to run when a client connects to the server.
 # This is terminated with SIGINT when a client disconnects from the server.
@@ -401,11 +404,15 @@ webrtcICEServers2: []
   # password: ''
 # clientOnly: false
 # Time to wait for the WebRTC handshake to complete.
-webrtcHandshakeTimeout: 10s
+# Lowered from the 10s default: on a LAN there's no NAT traversal or slow
+# STUN/TURN round-trip to wait for, so a stuck handshake can fail fast.
+webrtcHandshakeTimeout: 5s
 # Maximum time to gather video tracks.
 webrtcTrackGatherTimeout: 2s
 # The maximum time to gather STUN candidates.
-webrtcSTUNGatherTimeout: 5s
+# Not relevant without webrtcICEServers2 configured, but lowered to match
+# the LAN-only handshake timeout above.
+webrtcSTUNGatherTimeout: 3s
 
 ###############################################
 # Global settings -> SRT server
@@ -465,7 +472,9 @@ pathDefaults:
   sourceOnDemandStartTimeout: 10s
   # If sourceOnDemand is "yes", the source will be closed when there are no
   # readers connected and this amount of time has passed.
-  sourceOnDemandCloseAfter: 10s
+  # Lowered from the 10s default so on-demand sources free CPU/bandwidth
+  # sooner after the last LAN viewer disconnects.
+  sourceOnDemandCloseAfter: 5s
   # Maximum number of readers. Zero means no limit.
   maxReaders: 0
   # SRT encryption passphrase required to read from this path.
@@ -485,7 +494,12 @@ pathDefaults:
   # Extension is added automatically.
   # Available variables are %path (path name), %Y %m %d (year, month, day),
   # %H %M %S (hours, minutes, seconds), %f (microseconds), %z (time zone), %s (unix epoch).
-  recordPath: ./recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+  # Uses an absolute path so recordings survive container recreation.
+  # If you enable recording (record: yes, globally or per-path), mount a
+  # volume at /recordings in docker-compose (mediamtx service), e.g.:
+  #   volumes:
+  #     - ./recordings:/recordings
+  recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f
   # Format of recorded segments.
   # Available formats are "fmp4" (fragmented MP4) and "mpegts" (MPEG-TS).
   recordFormat: fmp4
