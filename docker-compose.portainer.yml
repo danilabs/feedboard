@@ -1,0 +1,106 @@
+# Feedboard - Portainer Stack
+#
+# Deploy via Portainer UI:
+#   Stacks -> Add stack -> Build method: Repository
+#     Repository URL: https://github.com/<your-fork>/feedboard
+#     Repository reference: refs/heads/main (or the branch you deployed)
+#     Compose path: docker-compose.portainer.yml
+#
+# Before deploying, set these in the stack's "Environment variables" section
+# (Portainer UI), NOT in a committed .env file:
+#
+#   JWT_SECRET             (required) - openssl rand -hex 32
+#   ADMIN_PASSWORD         (optional) - initial admin login, default: admin
+#   THUMBNAILER_TOKEN      (optional) - openssl rand -hex 32
+#   INTERNAL_PUBLISH_TOKEN (optional) - openssl rand -hex 32
+#   DOMAIN                 (optional) - your domain for automatic HTTPS
+#                                       (Let's Encrypt). Leave unset for a
+#                                       self-signed cert on :443.
+#   CORS_ORIGINS           (optional) - comma-separated allowed origins
+#
+# Notes for Portainer:
+#   - The `mediamtx` service uses network_mode: host for WebRTC/RTMP/SRT
+#     performance. This only works when the Portainer agent/endpoint is a
+#     Linux Docker host (not Docker Desktop on Mac/Windows).
+#   - feedboard, authproxy and thumbnailer are built from this repository's
+#     Dockerfiles by the Docker engine when Portainer deploys the stack -
+#     no external registry required.
+#   - If deploying behind a cloud firewall/security group, also open:
+#     TCP 1935 (RTMP), UDP 8189 (WebRTC), TCP 8554 (RTSP), UDP 8890 (SRT).
+
+services:
+  feedboard:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:-:443}
+      - MTX_HOST=host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./Caddyfile.docker:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - authproxy
+    networks:
+      - feedboard-net
+
+  # MediaMTX runs on host network for optimal WebRTC/UDP performance.
+  # Requires the Portainer endpoint to be a Linux Docker host.
+  mediamtx:
+    image: bluenviron/mediamtx:latest-ffmpeg
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - authproxy
+    environment:
+      - MTX_AUTHHTTPADDRESS=http://127.0.0.1:8091/auth/hook
+      - MTX_AUTHMETHOD=${AUTH_METHOD:-http}
+      - INTERNAL_PUBLISH_TOKEN=${INTERNAL_PUBLISH_TOKEN:-}
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+
+  authproxy:
+    build: ./authproxy
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8091:8091"  # localhost only; mediamtx (host network) reaches it here
+    environment:
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in the Portainer stack environment variables}
+      - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-dev-thumbnailer-token-change-in-prod}
+      - INTERNAL_PUBLISH_TOKEN=${INTERNAL_PUBLISH_TOKEN:-}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+    volumes:
+      - authproxy_data:/data
+    networks:
+      - feedboard-net
+
+  thumbnailer:
+    build: ./thumbnailer
+    restart: unless-stopped
+    depends_on:
+      - mediamtx
+    expose:
+      - "8090"
+    environment:
+      - THUMBNAILER_TOKEN=${THUMBNAILER_TOKEN:-dev-thumbnailer-token-change-in-prod}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command:
+      - "-mediamtx-api=http://host.docker.internal:9997"
+      - "-mediamtx-rtsp=rtsp://host.docker.internal:8554"
+    networks:
+      - feedboard-net
+
+networks:
+  feedboard-net:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  authproxy_data:

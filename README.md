@@ -89,6 +89,26 @@ cp .env.template .env
 docker compose up -d
 ```
 
+### Portainer Deployment
+
+Feedboard can be deployed as a Portainer stack directly from this repository:
+
+1. In Portainer: **Stacks → Add stack → Build method: Repository**
+2. **Repository URL**: this repo's URL (use your fork if you customized anything)
+3. **Compose path**: `docker-compose.portainer.yml`
+4. Under **Environment variables**, set at minimum:
+   - `JWT_SECRET` — generate with `openssl rand -hex 32` (required, deploy fails without it)
+   - `ADMIN_PASSWORD` — initial admin login (optional, defaults to `admin`)
+   - `THUMBNAILER_TOKEN`, `INTERNAL_PUBLISH_TOKEN` — service tokens (optional but recommended for production)
+   - `DOMAIN` — your domain for automatic Let's Encrypt HTTPS (optional; omit for a self-signed cert on `:443`)
+5. Deploy the stack. Portainer builds `feedboard`, `authproxy`, and `thumbnailer` from their Dockerfiles in this repo — no external image registry needed.
+
+**Requirements:**
+- The Portainer endpoint must be a **Linux Docker host** — the `mediamtx` service uses `network_mode: host` for WebRTC/RTMP/SRT performance, which isn't available on Docker Desktop (Mac/Windows).
+- If deploying behind a cloud firewall/security group, also open: TCP 1935 (RTMP), UDP 8189 (WebRTC), TCP 8554 (RTSP), UDP 8890 (SRT), in addition to 80/443.
+
+See `docker-compose.portainer.yml` for the full stack definition and inline notes.
+
 ### AWS EC2 / Cloud Deployment
 
 For WebRTC to work from external clients, MediaMTX needs to advertise a public IP. Edit within `mediamtx.yml`:
