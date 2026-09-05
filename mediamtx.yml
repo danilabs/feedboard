@@ -58,10 +58,12 @@ authInternalUsers:
     # Default administrator.
     # This allows to use API, metrics and PPROF without authentication,
     # if the IP is localhost.
-  # Localhost only for API/metrics
+  # Localhost and local LAN (192.168.1.0/24) for API/metrics/pprof.
+  # Anyone on this subnet can hit the API without credentials - only
+  # extend this range on networks you trust.
   - user: any
     pass:
-    ips: ['127.0.0.1', '::1']
+    ips: ['127.0.0.1', '::1', '192.168.1.0/24']
     permissions:
       - action: api
       - action: metrics
@@ -383,6 +385,10 @@ webrtcIPsFromInterfaces: yes
 # An empty value means to use all available interfaces.
 webrtcIPsFromInterfacesList: []
 # List of additional hosts or IPs to send to clients.
+# This field takes individual hosts/IPs, not CIDR ranges. Add the
+# server's real LAN IP (within 192.168.1.0/24) so WebRTC clients on
+# that subnet can generate working ICE candidates, e.g.:
+#   webrtcAdditionalHosts: ['127.0.0.1', '192.168.1.X']
 webrtcAdditionalHosts: ['127.0.0.1']
 # ICE servers. Needed only when local listeners can't be reached by clients.
 # STUN servers allows to obtain and share the public IP of the server.
