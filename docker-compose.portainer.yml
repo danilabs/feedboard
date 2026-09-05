@@ -40,8 +40,10 @@ services:
       - MTX_HOST=host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    configs:
+      - source: caddyfile_docker
+        target: /etc/caddy/Caddyfile
     volumes:
-      - ./Caddyfile.docker:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
     depends_on:
       - authproxy
@@ -60,8 +62,9 @@ services:
       - MTX_AUTHHTTPADDRESS=http://127.0.0.1:8091/auth/hook
       - MTX_AUTHMETHOD=${AUTH_METHOD:-http}
       - INTERNAL_PUBLISH_TOKEN=${INTERNAL_PUBLISH_TOKEN:-}
-    volumes:
-      - ./mediamtx.yml:/mediamtx.yml:ro
+    configs:
+      - source: mediamtx_yml
+        target: /mediamtx.yml
 
   authproxy:
     build: ./authproxy
@@ -104,3 +107,9 @@ networks:
 volumes:
   caddy_data:
   authproxy_data:
+
+configs:
+  caddyfile_docker:
+    file: ./Caddyfile.docker
+  mediamtx_yml:
+    file: ./mediamtx.yml
