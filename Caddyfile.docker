@@ -1,6 +1,12 @@
 # Feedboard production Caddyfile
 #
-# Set DOMAIN=yourdomain.com for automatic Let's Encrypt HTTPS
+# Set DOMAIN=yourdomain.com for automatic Let's Encrypt HTTPS.
+# Set DOMAIN=:80 for plain HTTP - e.g. accessing the server by LAN IP
+# only, with no hostname to issue a certificate for.
+
+{
+	auto_https disable_certs
+}
 
 {$DOMAIN} {
 
