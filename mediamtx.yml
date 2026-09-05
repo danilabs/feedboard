@@ -28,10 +28,12 @@ udpMaxPayloadSize: 1472
 # Size of the read buffer of every UDP socket.
 # This can be increased to decrease packet losses.
 # It defaults to the default value of the operating system.
-# Raised from the OS default to better absorb bursts from WebRTC/RTP on the
-# LAN (multiple simultaneous streams competing for the same socket buffer).
-# 2MB is a safe upper bound for a home server; lower it if RAM is tight.
-udpReadBufferSize: 2097152
+# Left at the OS default (0): mediamtx 1.20+ treats a requested size the
+# kernel won't grant (net.core.rmem_max) as a fatal error and refuses to
+# start, instead of the older warn-and-continue behavior. Most hosts cap
+# rmem_max well under a few MB by default, so raise this only after also
+# raising net.core.rmem_max on the host, and confirm with a real deploy.
+udpReadBufferSize: 0
 
 # Command to run when a client connects to the server.
 # This is terminated with SIGINT when a client disconnects from the server.
