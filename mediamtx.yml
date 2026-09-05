@@ -89,7 +89,12 @@ authInternalUsers:
 # }
 # If the response code is 20x, authentication is accepted, otherwise
 # it is discarded.
-authHTTPAddress: http://authproxy:8091/auth/hook
+# mediamtx runs with network_mode: host in every compose file in this repo,
+# so "authproxy" (a bridge-network DNS name) never resolves here. authproxy
+# publishes on 127.0.0.1:8091 specifically so the host-network mediamtx can
+# reach it - match that here instead of relying on MTX_AUTHHTTPADDRESS,
+# since a literal value in this file takes precedence over the env var.
+authHTTPAddress: http://127.0.0.1:8091/auth/hook
 # Actions to exclude from HTTP-based authentication.
 # Format is the same as the one of user permissions.
 authHTTPExclude:
