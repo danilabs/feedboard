@@ -91,23 +91,58 @@ docker compose up -d
 
 ### Portainer Deployment
 
-Feedboard can be deployed as a Portainer stack directly from this repository:
+Feedboard can be deployed as a Portainer stack directly from this repository, using Git-based builds (no external image registry needed).
 
-1. In Portainer: **Stacks → Add stack → Build method: Repository**
-2. **Repository URL**: this repo's URL (use your fork if you customized anything)
-3. **Compose path**: `docker-compose.portainer.yml`
-4. Under **Environment variables**, set at minimum:
-   - `JWT_SECRET` — generate with `openssl rand -hex 32` (required, deploy fails without it)
-   - `ADMIN_PASSWORD` — initial admin login (optional, defaults to `admin`)
-   - `THUMBNAILER_TOKEN`, `INTERNAL_PUBLISH_TOKEN` — service tokens (optional but recommended for production)
-   - `DOMAIN` — your domain for automatic Let's Encrypt HTTPS (optional; omit for a self-signed cert on `:443`)
-5. Deploy the stack. Portainer builds `feedboard`, `authproxy`, and `thumbnailer` from their Dockerfiles in this repo — no external image registry needed.
+**1. Create the stack**
 
-**Requirements:**
-- The Portainer endpoint must be a **Linux Docker host** — the `mediamtx` service uses `network_mode: host` for WebRTC/RTMP/SRT performance, which isn't available on Docker Desktop (Mac/Windows).
+In Portainer: **Stacks → Add stack → Build method: Repository**
+
+| Field | Value |
+|-------|-------|
+| Repository URL | this repo's URL (your fork, if you customized anything) |
+| Repository reference | `refs/heads/main` (or the branch with your changes) |
+| Compose path | `docker-compose.portainer.yml` |
+
+**2. Set environment variables**
+
+Under the stack's **Environment variables** section (not a committed `.env` file):
+
+| Variable | Required | Description |
+|----------|----------|--------------|
+| `JWT_SECRET` | **Yes** | Generate with `openssl rand -hex 32`. Deploy fails without it. |
+| `ADMIN_PASSWORD` | No | Initial admin login, defaults to `admin` — change it after first login |
+| `THUMBNAILER_TOKEN` | No | Service token, generate with `openssl rand -hex 32` |
+| `INTERNAL_PUBLISH_TOKEN` | No | Service token for test-stream publishers |
+| `DOMAIN` | No | Your domain for automatic Let's Encrypt HTTPS. Omit for a self-signed cert on `:443` |
+| `CORS_ORIGINS` | No | Comma-separated allowed origins, only needed if the API is served from a different origin |
+
+**3. Deploy**
+
+Portainer builds `feedboard`, `authproxy`, and `thumbnailer` from their Dockerfiles in this repo, then starts the stack.
+
+**Requirements & caveats:**
+
+- The Portainer endpoint must be a **Linux Docker host** — the `mediamtx` service uses `network_mode: host` for WebRTC/RTMP/SRT performance, which Docker Desktop (Mac/Windows) doesn't support.
 - If deploying behind a cloud firewall/security group, also open: TCP 1935 (RTMP), UDP 8189 (WebRTC), TCP 8554 (RTSP), UDP 8890 (SRT), in addition to 80/443.
+- `mediamtx.yml` is tuned for LAN/low-latency use out of the box (see [Tuning `mediamtx.yml`](#tuning-mediamtxyml) below). If you're deploying to a cloud host with external clients, review that section too.
 
 See `docker-compose.portainer.yml` for the full stack definition and inline notes.
+
+#### Tuning `mediamtx.yml`
+
+The bundled `mediamtx.yml` ships with a few adjustments on top of MediaMTX's defaults, aimed at a home/LAN deployment:
+
+- **`authInternalUsers[0].ips`** includes `192.168.1.0/24` in addition to `127.0.0.1`/`::1`, so devices on that LAN can reach the MediaMTX API/metrics/pprof endpoints directly, without going through authproxy. If your LAN uses a different subnet, or you don't want unauthenticated API access beyond localhost, edit or remove this entry — anyone on the listed range can hit the API with no credentials.
+- **`webrtcAdditionalHosts`** must list the server's actual LAN IP (a concrete address, not a CIDR range) for WebRTC ICE candidates to resolve correctly from other devices on the network. Replace the placeholder with your server's real IP, e.g. `webrtcAdditionalHosts: ['127.0.0.1', '192.168.1.50']`. For a cloud deployment, use the public IP instead (see [AWS EC2 / Cloud Deployment](#aws-ec2--cloud-deployment)).
+- **`udpReadBufferSize`** is raised to 2MB (from the OS default) to reduce packet loss when multiple WebRTC/RTP streams share the same socket buffer.
+- **`webrtcHandshakeTimeout`**, **`webrtcSTUNGatherTimeout`**, and **`sourceOnDemandCloseAfter`** are lowered from their defaults, since a LAN doesn't need NAT-traversal-grade timeouts — failures surface faster and idle on-demand sources free up sooner.
+- **`recordPath`** uses an absolute path (`/recordings/...`) instead of a relative one, so recordings survive container recreation. Recording is disabled by default (`record: no`); if you enable it, mount a volume for the `mediamtx` service in your compose file:
+  ```yaml
+  mediamtx:
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+      - ./recordings:/recordings
+  ```
 
 ### AWS EC2 / Cloud Deployment
 
